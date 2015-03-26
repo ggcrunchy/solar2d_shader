@@ -31,6 +31,7 @@ function M.AddPi ()
 	return [[
 		float PI = 4. * atan(1.);
 		float TWO_PI = 2. * PI;
+		float PI_OVER_TWO = PI / 2.;
 
 		float ONE_OVER_PI = 1. / PI;
 		float ONE_OVER_TWO_PI = .5 / PI;
