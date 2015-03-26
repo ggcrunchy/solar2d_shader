@@ -28,30 +28,43 @@ local abs = math.abs
 local floor = math.floor
 
 -- Cached module references --
-local _XY_01_01_
+local _XY_UnitPair_
 
 -- Exports --
 local M = {}
 
 --- DOCME
-function M.VertexDatum_01_01 (name, index, defx, defy)
+function M.VertexDatum_UnitPair (name, index, defx, defy)
 	return {
 		name = name,
-		default = _XY_01_01_(defx, defy),
+		default = _XY_UnitPair_(defx, defy),
 		min = -1023.5, max = 1023.5,
 		index = index
 	}
 end
 
 --- DOCME
-function M.XY_01_01 (x, y)
+-- @number x A value &isin; [0, 1]...
+-- @number y ...and another one.
+-- @treturn number The packed value.
+function M.XY_UnitPair (x, y)
 	y = y - .5
 
 	return (y < 0 and -1 or 1) * (floor(1023 * x) + abs(y))
 end
 
+-- triple, quad...
+
+-- Todo: [0, 1], [0, 1)
+-- Integer in [0, 1023], [0, 1); [0, 1023], [0, 1]
+-- Sign meant for other purpose: need to increment integer to guard against 0, limits range to [0, 1022]
+-- Barycentric coordinates (not really a packing, more a helper... perhaps elsewhere?)
+-- Two integers in [0, 511]... or four...
+-- Quantized to lattice of size 1023, with dimensions [0, 2^m), [0, 2^n), s.t. n + m = 10
+-- Vector versions (unpack side)
+
 -- Cache module members.
-_XY_01_01_ = M.XY_01_01
+_XY_UnitPair_ = M.XY_UnitPair
 
 -- Export the module.
 return M

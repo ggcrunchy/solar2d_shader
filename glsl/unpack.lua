@@ -1,4 +1,4 @@
---- GLSL-side data-unpacking routines.
+--- GLSL-side logic to acquire data sent by @{corona_shader.lua.pack}'s routines.
 
 --
 -- Permission is hereby granted, free of charge, to any person obtaining
@@ -27,9 +27,9 @@
 local M = {}
 
 --- DOCME
-function M.AddUnpack_01_01 ()
+function M.AddUnpack_UnitPair ()
 	return [[
-		vec2 Unpack_01_01 (float xy)
+		vec2 Unpack_UnitPair (float xy)
 		{
 			P_UV float axy = abs(xy);
 			P_UV float frac = fract(axy);
