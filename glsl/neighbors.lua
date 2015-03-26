@@ -1,4 +1,4 @@
---- GLSL-side mixins to acquire data sent by @{corona_shader.lua.pack}'s routines.
+--- Neighboring pixel mixins.
 
 --
 -- Permission is hereby granted, free of charge, to any person obtaining
@@ -27,14 +27,32 @@
 local M = {}
 
 --- DOCME
-function M.AddUnpack_UnitPair ()
+function M.AddAlphaLogic ()
 	return [[
-		vec2 Unpack_UnitPair (float xy)
+		float GetLaplacian (sampler2D s, vec2 uv, float a0, float thickness)
 		{
-			P_UV float axy = abs(xy);
-			P_UV float frac = fract(axy);
+			a0 *= 4.;
+			a0 -= texture2D(s, uv + vec2(thickness * CoronaTexelSize.x, 0.)).a;
+			a0 -= texture2D(s, uv - vec2(thickness * CoronaTexelSize.x, 0.)).a;
+			a0 -= texture2D(s, uv + vec2(0., thickness * CoronaTexelSize.y)).a;
+			a0 -= texture2D(s, uv - vec2(0., thickness * CoronaTexelSize.y)).a;
 
-			return vec2((axy - frac) * (1. / 1024.), sign(xy) * frac + .5);
+			return a0;
+		}
+	]]
+end
+
+--- DOCME
+function M.AddPixelLogic ()
+	return [[
+		vec4 GetAbovePixel (sampler2D s, vec2 uv)
+		{
+			return texture2D(s, uv + vec2(0., CoronaTexelSize.y));
+		}
+
+		vec4 GetRightPixel (sampler2D s, vec2 uv)
+		{
+			return texture2D(s, uv + vec2(CoronaTexelSize.x, 0.));
 		}
 	]]
 end
