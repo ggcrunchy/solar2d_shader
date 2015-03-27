@@ -34,36 +34,41 @@ function M.AddSphereLogic ()
 	return constants.AddPi() .. [[
 		vec2 GetUV (vec2 diff)
 		{
-			P_DEFAULT float dist_sq = dot(diff, diff);
+			P_POSITION float dist_sq = dot(diff, diff);
 
 			if (dist_sq > 1.) discard;
 
-			P_DEFAULT float z = sqrt(1. - dist_sq);
+			P_POSITION float z = sqrt(1. - dist_sq);
 
 			return vec2(.5 + atan(z, diff.x) / TWO_PI, .5 + asin(diff.y) / PI);
 		}
 
+		vec2 GetUV (vec3 dir)
+		{
+			return vec2(.5 + atan(dir.z, dir.x) / TWO_PI, .5 + asin(dir.y) / PI);
+		}
+
 		vec4 GetUV_ZPhi (vec2 diff)
 		{
-			P_DEFAULT float dist_sq = dot(diff, diff);
+			P_POSITION float dist_sq = dot(diff, diff);
 
 			if (dist_sq > 1.) discard;
 
-			P_DEFAULT float z = sqrt(1. - dist_sq);
-			P_DEFAULT float phi = atan(z, diff.x);
+			P_POSITION float z = sqrt(1. - dist_sq);
+			P_POSITION float phi = atan(z, diff.x);
 
 			return vec4(.5 + phi / TWO_PI, .5 + asin(diff.y) / PI, z, phi);
 		}
 
 		vec2 GetUV_PhiDelta (vec2 diff, float dphi)
 		{
-			P_DEFAULT float dist_sq = dot(diff, diff);
+			P_POSITION float dist_sq = dot(diff, diff);
 
 			if (dist_sq > 1.) discard;
 
-			P_DEFAULT float z = sqrt(1. - dist_sq);
-			P_DEFAULT float phi = atan(z, diff.x);
-			P_DEFAULT float angle = .5 + phi / TWO_PI;
+			P_POSITION float z = sqrt(1. - dist_sq);
+			P_POSITION float phi = atan(z, diff.x);
+			P_POSITION float angle = .5 + phi / TWO_PI;
 
 			angle = mod(angle + dphi, 1.);
 
@@ -72,13 +77,13 @@ function M.AddSphereLogic ()
 
 		vec4 GetUV_PhiDelta_ZPhi (vec2 diff, float dphi)
 		{
-			P_DEFAULT float dist_sq = dot(diff, diff);
+			P_POSITION float dist_sq = dot(diff, diff);
 
 			if (dist_sq > 1.) discard;
 
-			P_DEFAULT float z = sqrt(1. - dist_sq);
-			P_DEFAULT float phi = atan(z, diff.x);
-			P_DEFAULT float angle = .5 + phi / TWO_PI;
+			P_POSITION float z = sqrt(1. - dist_sq);
+			P_POSITION float phi = atan(z, diff.x);
+			P_POSITION float angle = .5 + phi / TWO_PI;
 
 			angle = mod(angle + dphi, 1.);
 

@@ -38,7 +38,7 @@ function M.UnitPair_XY (pair)
 	local apair = abs(pair)
 	local xpart = floor(apair)
 
-	return xpart / 1023, (pair < 0 and -1 or 1) * (apair - xpart) -- TODO: + .5 not needed?!?!?
+	return xpart / 1023, (pair < 0 and -1 or 1) * (apair - xpart) + .5
 end
 
 --- DOCME
