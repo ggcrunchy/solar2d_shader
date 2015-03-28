@@ -29,7 +29,7 @@ local M = {}
 --- DOCME
 function M.AddAlphaLogic ()
 	return [[
-		float GetLaplacian (sampler2D s, vec2 uv, float a0, float thickness)
+		float GetLaplacian (sampler2D s, P_UV vec2 uv, P_UV float a0, P_POSITION float thickness)
 		{
 			a0 *= 4.;
 			a0 -= texture2D(s, uv + vec2(thickness * CoronaTexelSize.x, 0.)).a;
