@@ -48,7 +48,7 @@ end
 function M.AddProperty_UnitPairVertex (kernel, index, prop1, prop2, combo, a, b)
 	local kdata, vdata = GetPropertyData(kernel), kernel.vertexData or {}
 	local props = kdata.properties or {
-		needs_state = true,
+		id = ("%s.%s"):format(kernel.category, kernel.name), needs_state = true,
 
 		__index = function(t, k, state)
 			local v = state[k]
