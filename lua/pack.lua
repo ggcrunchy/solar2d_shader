@@ -52,6 +52,20 @@ function M.VertexDatum_UnitPair (name, index, defx, defy)
 end
 
 --- DOCME
+function M.XY_Barycenter4 (x, y)
+	-- Compute barycentric coordinates of each corner using Q4 Serendipity quadrilaterals
+	-- with corners (-1, +1), (+1, +1), (-1, -1), (+1, -1).
+	x, y = 2 * x - 1, 2 * y - 1
+
+	local a = .25 * (1 - x) * (1 + y)
+	local b = .25 * (1 + x) * (1 + y)
+	local c = .25 * (1 - x) * (1 - y)
+	local d = .25 * (1 + x) * (1 - y)
+
+	return a, b, c, d
+end
+
+--- DOCME
 -- @number x A value &isin; [0, 1]...
 -- @number y ...and another one.
 -- @treturn number The packed value.

@@ -36,6 +36,15 @@ function M.AddUnpack_UnitPair ()
 
 			return vec2((axy - frac) * (1. / 1024.), sign(xy) * frac + .5);
 		}
+
+		void Unpack_UnitPair4 (vec4 xy, out vec4 x, out vec4 y)
+		{
+			P_UV vec4 axy = abs(xy);
+			P_UV vec4 frac = fract(axy);
+
+			x = (axy - frac) * (1. / 1024.);
+			y = sign(xy) * frac + .5;
+		}
 	]]
 end
 
