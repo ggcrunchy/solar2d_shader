@@ -26,6 +26,7 @@
 -- Standard library imports --
 local concat = table.concat
 local gmatch = string.gmatch
+local gsub = string.gsub
 local ipairs = ipairs
 local lower = string.lower
 local pairs = pairs
@@ -33,9 +34,23 @@ local require = require
 local sort = table.sort
 local sub = string.sub
 local type = type
+local upper = string.upper
 
 -- Exports --
 local M = {}
+
+--
+local function SlashComment (str)
+	return sub(str, -1) == "\n" and "\n" or ""
+end
+
+--
+local function EatComments (str)
+	str = gsub(str, "/%*.*%*/", "")
+	str = gsub(str, "//[^\n]*\n?", SlashComment)
+
+	return str
+end
 
 --
 local function OneString (str, done)
@@ -63,6 +78,8 @@ local function LoadConstants (input)
 	local ignore, f, s, v = GetInputAndIgnoreList(input)
 
 	for _, str in f, s, v do
+		str = EatComments(str)
+
 		for name in gmatch(str, "([_%w]+)%s*=") do
 			if not (ignore and ignore[name]) then
 				Names[name] = ID
@@ -80,18 +97,41 @@ LoadConstants("constants")
 -- --
 local DependsOn = {}
 
+-- --
+local IgnoreThese = {}
+
+for _, v in ipairs{
+	"if", "while", -- keywords
+	"bool", "int", "float", -- singleton constructors
+	"bvec2", "bvec3", "bvec4", -- vector / matrix constructors
+	"ivec2", "ivec3", "ivec4",
+	"mat2", "mat3", "mat4",
+	"vec2", "vec3", "vec4",
+	"radians", "degrees", "sin", "cos", "tan", "atan", "asin", "acos", -- angle / trig
+	"pow", "exp", "log", "exp2", "log2", "sqrt", "inversesqrt", -- exponential
+	"abs", "sign", "floor", "ceil", "fract", "mod", "min", "max", "clamp", "mix", "step", "smoothstep", -- common
+	"length", "distance", "dot", "cross", "normalize", "faceforward", "reflect", "refract", -- geometric
+	"matrixCompMult", -- matrix
+	"lessThan", "lessThanEqual", "greaterThan", "greaterThanEqual", "equal", "notEqual", "any", "all", "not", -- vector relational
+	"texture2D", "texture2DProj", "textureCube", "texture2DLod", "texture2DProjLod", "textureCubeLod", -- texture lookup
+	"CoronaVertexUserData", -- Corona data-passing
+	"CoronaSampler0", "CoronaSampler1", -- Corona samplers
+	"CoronaContentScale", "CoronaDeltaTime", "CoronaTotalTime", "CoronaTexCoord", "CoronaTexelSize", -- Corona environment variables
+	"CoronaColorScale" -- Corona functions
+} do
+	IgnoreThese[v] = true
+end
+
 --
 local function Ignore (ignore, what)
-	if what == "if" or what == "while" then
+	if IgnoreThese[what] then
 		return true
 	elseif ignore and ignore[what] then
 		return true
 	else
 		local first = sub(what, 1, 1)
 
-		return first ~= "_" and first == lower(first)
-		-- ^^^ TODO: use GLES ignore list, plus per-file ones
-		-- Strip comments up-front...
+		return first ~= "_" and lower(first) == upper(first)
 	end
 end
 
@@ -117,6 +157,8 @@ local function LoadFunctions (input)
 	--
 	for _, str in f, s, v do
 		local depends_on
+
+		str = EatComments(str)
 
 		for name, token in IterVars(str) do
 			if token ~= "(" and token ~= "{" and Names[name] then
@@ -244,8 +286,18 @@ local function Include (code)
 	end
 end
 
+-- --
+local Prelude = [[
+	#ifdef GL_ES
+		precision mediump float;
+	#endif
+
+]]
+
 --- DOCME
 function M.FragmentShader (code, suppress_precision)
+	code = EatComments(code)
+
 	local include = Include(code)
 
 	if include then
@@ -253,12 +305,7 @@ function M.FragmentShader (code, suppress_precision)
 	end
 
 	if not suppress_precision then
-		code = [[
-		#ifdef GL_ES
-			precision mediump float;
-		#endif
-
-		]] .. code
+		code = Prelude .. code
 	end
 
 	return code

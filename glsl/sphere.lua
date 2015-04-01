@@ -27,69 +27,71 @@
 local M = {}
 
 return {
-	[[
-		vec2 GetUV (vec2 diff)
-		{
-			P_POSITION float dist_sq = dot(diff, diff);
 
-			if (dist_sq > 1.) discard;
+[[
+	vec2 GetUV (vec2 diff)
+	{
+		P_POSITION float dist_sq = dot(diff, diff);
 
-			P_POSITION float z = sqrt(1. - dist_sq);
+		if (dist_sq > 1.) discard;
 
-			return vec2(.5 + atan(z, diff.x) / TWO_PI, .5 + asin(diff.y) / PI);
-		}
+		P_POSITION float z = sqrt(1. - dist_sq);
 
-		vec2 GetUV (vec3 dir)
-		{
-			return vec2(.5 + atan(dir.z, dir.x) / TWO_PI, .5 + asin(dir.y) / PI);
-		}
-	]], [[
-		vec4 GetUV_ZPhi (vec2 diff)
-		{
-			P_POSITION float dist_sq = dot(diff, diff);
+		return vec2(.5 + atan(z, diff.x) / TWO_PI, .5 + asin(diff.y) / PI);
+	}
 
-			if (dist_sq > 1.) discard;
+	vec2 GetUV (vec3 dir)
+	{
+		return vec2(.5 + atan(dir.z, dir.x) / TWO_PI, .5 + asin(dir.y) / PI);
+	}
+]], [[
+	vec4 GetUV_ZPhi (vec2 diff)
+	{
+		P_POSITION float dist_sq = dot(diff, diff);
 
-			P_POSITION float z = sqrt(1. - dist_sq);
-			P_POSITION float phi = atan(z, diff.x);
+		if (dist_sq > 1.) discard;
 
-			return vec4(.5 + phi / TWO_PI, .5 + asin(diff.y) / PI, z, phi);
-		}
-	]], [[
-		vec2 GetUV_PhiDelta (vec2 diff, float dphi)
-		{
-			P_POSITION float dist_sq = dot(diff, diff);
+		P_POSITION float z = sqrt(1. - dist_sq);
+		P_POSITION float phi = atan(z, diff.x);
 
-			if (dist_sq > 1.) discard;
+		return vec4(.5 + phi / TWO_PI, .5 + asin(diff.y) / PI, z, phi);
+	}
+]], [[
+	vec2 GetUV_PhiDelta (vec2 diff, float dphi)
+	{
+		P_POSITION float dist_sq = dot(diff, diff);
 
-			P_POSITION float z = sqrt(1. - dist_sq);
-			P_POSITION float phi = atan(z, diff.x);
-			P_POSITION float angle = .5 + phi / TWO_PI;
+		if (dist_sq > 1.) discard;
 
-			angle = mod(angle + dphi, 1.);
+		P_POSITION float z = sqrt(1. - dist_sq);
+		P_POSITION float phi = atan(z, diff.x);
+		P_POSITION float angle = .5 + phi / TWO_PI;
 
-			return vec2(angle, .5 + asin(diff.y) / PI);
-		}
-	]], [[
-		vec4 GetUV_PhiDelta_ZPhi (vec2 diff, float dphi)
-		{
-			P_POSITION float dist_sq = dot(diff, diff);
+		angle = mod(angle + dphi, 1.);
 
-			if (dist_sq > 1.) discard;
+		return vec2(angle, .5 + asin(diff.y) / PI);
+	}
+]], [[
+	vec4 GetUV_PhiDelta_ZPhi (vec2 diff, float dphi)
+	{
+		P_POSITION float dist_sq = dot(diff, diff);
 
-			P_POSITION float z = sqrt(1. - dist_sq);
-			P_POSITION float phi = atan(z, diff.x);
-			P_POSITION float angle = .5 + phi / TWO_PI;
+		if (dist_sq > 1.) discard;
 
-			angle = mod(angle + dphi, 1.);
+		P_POSITION float z = sqrt(1. - dist_sq);
+		P_POSITION float phi = atan(z, diff.x);
+		P_POSITION float angle = .5 + phi / TWO_PI;
 
-			return vec4(angle, .5 + asin(diff.y) / PI, z, phi);
-		}
-	]], [[
-		vec3 GetTangent (vec2 diff, float phi)
-		{
-			// In unit sphere, diff.y = sin(theta), sqrt(1 - sin(theta)^2) = cos(theta).
-			return normalize(vec3(diff.y * sin(phi + PI_OVER_TWO), diff.y * cos(phi + PI_OVER_TWO), sqrt(1. - diff.y * diff.y)));
-		}
-	]]
+		angle = mod(angle + dphi, 1.);
+
+		return vec4(angle, .5 + asin(diff.y) / PI, z, phi);
+	}
+]], [[
+	vec3 GetTangent (vec2 diff, float phi)
+	{
+		// In unit sphere, diff.y = sin(theta), sqrt(1 - sin(theta)^2) = cos(theta).
+		return normalize(vec3(diff.y * sin(phi + PI_OVER_TWO), diff.y * cos(phi + PI_OVER_TWO), sqrt(1. - diff.y * diff.y)));
+	}
+]]
+
 }

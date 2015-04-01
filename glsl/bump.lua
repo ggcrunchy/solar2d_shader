@@ -25,60 +25,62 @@
 
 -- Export the functions.
 return {
-	[[
-		vec3 ComputeNormal (sampler2D s, vec2 uv, vec3 tcolor)
-		{
-			P_COLOR vec3 right = texture2D(s, uv + vec2(CoronaTexelSize.x, 0.)).rgb;
-			P_COLOR vec3 above = texture2D(s, uv + vec2(0., CoronaTexelSize.y)).rgb;
-			P_COLOR float rz = dot(right - tcolor, vec3(1.));
-			P_COLOR float uz = dot(above - tcolor, vec3(1.));
 
-			return normalize(vec3(-uz, -rz, 1.));
-		}
+[[
+	vec3 ComputeNormal (sampler2D s, vec2 uv, vec3 tcolor)
+	{
+		P_COLOR vec3 right = texture2D(s, uv + vec2(CoronaTexelSize.x, 0.)).rgb;
+		P_COLOR vec3 above = texture2D(s, uv + vec2(0., CoronaTexelSize.y)).rgb;
+		P_COLOR float rz = dot(right - tcolor, vec3(1.));
+		P_COLOR float uz = dot(above - tcolor, vec3(1.));
 
-		vec3 ComputeNormal (sampler2D s, vec2 uv)
-		{
-			return ComputeNormal(s, uv, texture2D(s, uv).rgb);
-		}
-	]], [[
-		vec3 EncodeNormal (sampler2D s, vec2 uv, vec3 tcolor)
-		{
-			return .5 * (ComputeNormal(s, uv, tcolor) + 1.);
-		}
+		return normalize(vec3(-uz, -rz, 1.));
+	}
 
-		vec3 EncodeNormal (sampler2D s, vec2 uv)
-		{
-			return .5 * (ComputeNormal(s, uv) + 1.);
-		}
-	]], [[
-		vec3 GetWorldNormal_TS (vec3 bump, vec3 T, vec3 B, vec3 N)
-		{
-			return T * bump.x + B * bump.y + N * bump.z;
-		}
+	vec3 ComputeNormal (sampler2D s, vec2 uv)
+	{
+		return ComputeNormal(s, uv, texture2D(s, uv).rgb);
+	}
+]], [[
+	vec3 EncodeNormal (sampler2D s, vec2 uv, vec3 tcolor)
+	{
+		return .5 * (ComputeNormal(s, uv, tcolor) + 1.);
+	}
 
-		vec3 GetWorldNormal (vec3 bump, vec3 T, vec3 N)
-		{
-			return GetWorldNormal_TS(bump, T, cross(N, T), N);
-		}
+	vec3 EncodeNormal (sampler2D s, vec2 uv)
+	{
+		return .5 * (ComputeNormal(s, uv) + 1.);
+	}
+]], [[
+	vec3 GetWorldNormal_TS (vec3 bump, vec3 T, vec3 B, vec3 N)
+	{
+		return T * bump.x + B * bump.y + N * bump.z;
+	}
 
-		vec3 GetWorldNormal (sampler2D s, vec2 uv, vec3 tcolor, vec3 T, vec3 N)
-		{
-			return GetWorldNormal(ComputeNormal(s, uv, tcolor), T, N);
-		}
+	vec3 GetWorldNormal (vec3 bump, vec3 T, vec3 N)
+	{
+		return GetWorldNormal_TS(bump, T, cross(N, T), N);
+	}
 
-		vec3 GetWorldNormal (sampler2D s, vec2 uv, vec3 T, vec3 N)
-		{
-			return GetWorldNormal(ComputeNormal(s, uv), T, N);
-		}
+	vec3 GetWorldNormal (sampler2D s, vec2 uv, vec3 tcolor, vec3 T, vec3 N)
+	{
+		return GetWorldNormal(ComputeNormal(s, uv, tcolor), T, N);
+	}
 
-		vec3 GetWorldNormal_TS (sampler2D s, vec2 uv, vec3 tcolor, vec3 T, vec3 B, vec3 N)
-		{
-			return GetWorldNormal_TS(ComputeNormal(s, uv, tcolor), T, B, N);
-		}
+	vec3 GetWorldNormal (sampler2D s, vec2 uv, vec3 T, vec3 N)
+	{
+		return GetWorldNormal(ComputeNormal(s, uv), T, N);
+	}
 
-		vec3 GetWorldNormal_TS (sampler2D s, vec2 uv, vec3 T, vec3 B, vec3 N)
-		{
-			return GetWorldNormal_TS(ComputeNormal(s, uv), T, B, N);
-		}
-	]]
+	vec3 GetWorldNormal_TS (sampler2D s, vec2 uv, vec3 tcolor, vec3 T, vec3 B, vec3 N)
+	{
+		return GetWorldNormal_TS(ComputeNormal(s, uv, tcolor), T, B, N);
+	}
+
+	vec3 GetWorldNormal_TS (sampler2D s, vec2 uv, vec3 T, vec3 B, vec3 N)
+	{
+		return GetWorldNormal_TS(ComputeNormal(s, uv), T, B, N);
+	}
+]]
+
 }

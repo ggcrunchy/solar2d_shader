@@ -25,26 +25,28 @@
 
 -- Export the functions.
 return {
-	[[
-		float GetLaplacian (sampler2D s, vec2 uv, float a0, float thickness)
-		{
-			a0 *= 4.;
-			a0 -= texture2D(s, uv + vec2(thickness * CoronaTexelSize.x, 0.)).a;
-			a0 -= texture2D(s, uv - vec2(thickness * CoronaTexelSize.x, 0.)).a;
-			a0 -= texture2D(s, uv + vec2(0., thickness * CoronaTexelSize.y)).a;
-			a0 -= texture2D(s, uv - vec2(0., thickness * CoronaTexelSize.y)).a;
 
-			return a0;
-		}
-	]], [[
-		vec4 GetAbovePixel (sampler2D s, vec2 uv)
-		{
-			return texture2D(s, uv + vec2(0., CoronaTexelSize.y));
-		}
+[[
+	float GetLaplacian (sampler2D s, vec2 uv, float a0, float thickness)
+	{
+		a0 *= 4.;
+		a0 -= texture2D(s, uv + vec2(thickness * CoronaTexelSize.x, 0.)).a;
+		a0 -= texture2D(s, uv - vec2(thickness * CoronaTexelSize.x, 0.)).a;
+		a0 -= texture2D(s, uv + vec2(0., thickness * CoronaTexelSize.y)).a;
+		a0 -= texture2D(s, uv - vec2(0., thickness * CoronaTexelSize.y)).a;
 
-		vec4 GetRightPixel (sampler2D s, vec2 uv)
-		{
-			return texture2D(s, uv + vec2(CoronaTexelSize.x, 0.));
-		}
-	]]
+		return a0;
+	}
+]], [[
+	vec4 GetAbovePixel (sampler2D s, vec2 uv)
+	{
+		return texture2D(s, uv + vec2(0., CoronaTexelSize.y));
+	}
+
+	vec4 GetRightPixel (sampler2D s, vec2 uv)
+	{
+		return texture2D(s, uv + vec2(CoronaTexelSize.x, 0.));
+	}
+]]
+
 }
