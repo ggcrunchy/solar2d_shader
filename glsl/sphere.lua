@@ -23,15 +23,11 @@
 -- [ MIT license: http://www.opensource.org/licenses/mit-license.php ]
 --
 
--- Modules --
-local constants = require("corona_shader.glsl.constants")
-
--- Exports --
+-- Export the functions.
 local M = {}
 
---- DOCME
-function M.AddSphereLogic ()
-	return constants.AddPi() .. [[
+return {
+	[[
 		vec2 GetUV (vec2 diff)
 		{
 			P_POSITION float dist_sq = dot(diff, diff);
@@ -47,7 +43,7 @@ function M.AddSphereLogic ()
 		{
 			return vec2(.5 + atan(dir.z, dir.x) / TWO_PI, .5 + asin(dir.y) / PI);
 		}
-
+	]], [[
 		vec4 GetUV_ZPhi (vec2 diff)
 		{
 			P_POSITION float dist_sq = dot(diff, diff);
@@ -59,7 +55,7 @@ function M.AddSphereLogic ()
 
 			return vec4(.5 + phi / TWO_PI, .5 + asin(diff.y) / PI, z, phi);
 		}
-
+	]], [[
 		vec2 GetUV_PhiDelta (vec2 diff, float dphi)
 		{
 			P_POSITION float dist_sq = dot(diff, diff);
@@ -74,7 +70,7 @@ function M.AddSphereLogic ()
 
 			return vec2(angle, .5 + asin(diff.y) / PI);
 		}
-
+	]], [[
 		vec4 GetUV_PhiDelta_ZPhi (vec2 diff, float dphi)
 		{
 			P_POSITION float dist_sq = dot(diff, diff);
@@ -89,14 +85,11 @@ function M.AddSphereLogic ()
 
 			return vec4(angle, .5 + asin(diff.y) / PI, z, phi);
 		}
-
+	]], [[
 		vec3 GetTangent (vec2 diff, float phi)
 		{
 			// In unit sphere, diff.y = sin(theta), sqrt(1 - sin(theta)^2) = cos(theta).
 			return normalize(vec3(diff.y * sin(phi + PI_OVER_TWO), diff.y * cos(phi + PI_OVER_TWO), sqrt(1. - diff.y * diff.y)));
 		}
 	]]
-end
-
--- Export the module.
-return M
+}

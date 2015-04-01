@@ -26,6 +26,7 @@
 -- Standard library imports --
 local concat = table.concat
 local gmatch = string.gmatch
+local ipairs = ipairs
 local lower = string.lower
 local pairs = pairs
 local require = require
@@ -37,36 +38,40 @@ local type = type
 local M = {}
 
 --
+local function OneString (str, done)
+	if not done then
+		return true, str
+	end
+end
+
+--
 local function GetInputAndIgnoreList (name)
 	local input, ignore = require("corona_shader.glsl." .. name)
 
 	if type(input) == "table" then
-	--	return input.string, input.ignore
-	return input
+		return input.ignore, ipairs(input)
 	else
-		return input
+		return nil, OneString, input
 	end
 end
 
 -- --
-local ID = 1
-
--- --
-local Code, Names = {}, {}
+local Code, Names, ID = {}, {}, 1
 
 --
 local function LoadConstants (input)
-	local str, ignore = GetInputAndIgnoreList(input)
-for _, str in pairs(str) do
-	for name in gmatch(str(), "([_%w]+)%s*=") do
-		if not (ignore and ignore[name]) then
-			Names[name] = ID
-		end
-	end
+	local ignore, f, s, v = GetInputAndIgnoreList(input)
 
-	--
-	ID, Code[ID] = ID + 1, str()
-end
+	for _, str in f, s, v do
+		for name in gmatch(str, "([_%w]+)%s*=") do
+			if not (ignore and ignore[name]) then
+				Names[name] = ID
+			end
+		end
+
+		--
+		ID, Code[ID] = ID + 1, str
+	end
 end
 
 --
@@ -85,6 +90,8 @@ local function Ignore (ignore, what)
 		local first = sub(what, 1, 1)
 
 		return first ~= "_" and first == lower(first)
+		-- ^^^ TODO: use GLES ignore list, plus per-file ones
+		-- Strip comments up-front...
 	end
 end
 
@@ -105,39 +112,39 @@ end
 
 --
 local function LoadFunctions (input)
-	local str, ignore = GetInputAndIgnoreList(input)
-for _, str in pairs(str) do
+	local ignore, f, s, v = GetInputAndIgnoreList(input)
 
 	--
-	local depends_on
+	for _, str in f, s, v do
+		local depends_on
 
-	for name, token in IterVars(str()) do
-		if token ~= "(" and token ~= "{" and Names[name] then
-			depends_on = depends_on or {}
+		for name, token in IterVars(str) do
+			if token ~= "(" and token ~= "{" and Names[name] then
+				depends_on = depends_on or {}
 
-			depends_on[name] = true
+				depends_on[name] = true
+			end
 		end
-	end
 
-	--
-	for name, token in IterCalls(str()) do
-		if token ~= "{" and not (Ignore(ignore, name)) then
-			depends_on = depends_on or {}
+		--
+		for name, token in IterCalls(str) do
+			if token ~= "{" and not (Ignore(ignore, name)) then
+				depends_on = depends_on or {}
 
-			depends_on[name] = true
+				depends_on[name] = true
+			end
 		end
-	end
 
-	--
-	for name in IterDefs(str()) do
-		if not Ignore(ignore, name) then
-			Names[name] = ID
+		--
+		for name in IterDefs(str) do
+			if not Ignore(ignore, name) then
+				Names[name] = ID
+			end
 		end
-	end
 
-	--
-	ID, Code[ID], DependsOn[ID] = ID + 1, str(), depends_on
-end
+		--
+		ID, Code[ID], DependsOn[ID] = ID + 1, str, depends_on
+	end
 end
 
 --
@@ -159,31 +166,34 @@ local function Visit (index)
 
 		if deps then
 			for name in pairs(deps) do
-				local dep_id = Names[name]
-
-				if dep_id ~= index then
-					Visit(dep_id)
-				end
+				Visit(Names[name])
 			end
 		end
+
+		List[#List + 1] = index
 	end
 end
 
-repeat
-	local node
+for i = 1, ID do
+	Visit(i)
+end
 
-	for i = 1, ID do
-		if Marks[i] == nil then
-			node = i
+--
+local function CollectDependencies (collect, id)
+	local deps = DependsOn[id]
 
-			Visit(i)
+	if deps then
+		for name in pairs(deps) do
+			local dep_id = Names[name]
 
-			List[#List + 1], Marks[i] = i, true
-
-			break
+			if dep_id ~= id then
+				CollectDependencies(collect, dep_id)
+			end
 		end
 	end
-until node == nil
+
+	collect[#collect + 1] = id
+end
 
 --
 local function CollectName (collect, name)
@@ -192,7 +202,7 @@ local function CollectName (collect, name)
 	if id then
 		collect = collect or {}
 
-		collect[#collect + 1] = id
+		CollectDependencies(collect, id)
 	end
 
 	return collect

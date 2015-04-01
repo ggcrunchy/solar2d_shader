@@ -23,12 +23,9 @@
 -- [ MIT license: http://www.opensource.org/licenses/mit-license.php ]
 --
 
--- Exports --
-local M = {}
-
---- DOCME
-function M.AddBumpMapGenerators ()
-	return [[
+-- Export the functions.
+return {
+	[[
 		vec3 ComputeNormal (sampler2D s, vec2 uv, vec3 tcolor)
 		{
 			P_COLOR vec3 right = texture2D(s, uv + vec2(CoronaTexelSize.x, 0.)).rgb;
@@ -43,7 +40,7 @@ function M.AddBumpMapGenerators ()
 		{
 			return ComputeNormal(s, uv, texture2D(s, uv).rgb);
 		}
-
+	]], [[
 		vec3 EncodeNormal (sampler2D s, vec2 uv, vec3 tcolor)
 		{
 			return .5 * (ComputeNormal(s, uv, tcolor) + 1.);
@@ -53,12 +50,7 @@ function M.AddBumpMapGenerators ()
 		{
 			return .5 * (ComputeNormal(s, uv) + 1.);
 		}
-	]]
-end
-
---- DOCME
-function M.AddBumpMapLogic ()
-	return [[
+	]], [[
 		vec3 GetWorldNormal_TS (vec3 bump, vec3 T, vec3 B, vec3 N)
 		{
 			return T * bump.x + B * bump.y + N * bump.z;
@@ -89,7 +81,4 @@ function M.AddBumpMapLogic ()
 			return GetWorldNormal_TS(ComputeNormal(s, uv), T, B, N);
 		}
 	]]
-end
-
--- Export the module.
-return M
+}

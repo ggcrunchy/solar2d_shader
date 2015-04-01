@@ -23,12 +23,9 @@
 -- [ MIT license: http://www.opensource.org/licenses/mit-license.php ]
 --
 
--- Exports --
-local M = {}
-
---- DOCME
-function M.AddAlphaLogic ()
-	return [[
+-- Export the functions.
+return {
+	[[
 		float GetLaplacian (sampler2D s, vec2 uv, float a0, float thickness)
 		{
 			a0 *= 4.;
@@ -39,12 +36,7 @@ function M.AddAlphaLogic ()
 
 			return a0;
 		}
-	]]
-end
-
---- DOCME
-function M.AddPixelLogic ()
-	return [[
+	]], [[
 		vec4 GetAbovePixel (sampler2D s, vec2 uv)
 		{
 			return texture2D(s, uv + vec2(0., CoronaTexelSize.y));
@@ -55,7 +47,4 @@ function M.AddPixelLogic ()
 			return texture2D(s, uv + vec2(CoronaTexelSize.x, 0.));
 		}
 	]]
-end
-
--- Export the module.
-return M
+}

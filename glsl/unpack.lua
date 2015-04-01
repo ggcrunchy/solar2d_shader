@@ -23,12 +23,9 @@
 -- [ MIT license: http://www.opensource.org/licenses/mit-license.php ]
 --
 
--- Exports --
-local M = {}
-
---- DOCME
-function M.AddUnpack_UnitPair ()
-	return [[
+-- Export the functions.
+return {
+	[[
 		vec2 Unpack_UnitPair (float xy)
 		{
 			P_UV float axy = abs(xy);
@@ -36,7 +33,7 @@ function M.AddUnpack_UnitPair ()
 
 			return vec2((axy - frac) * (1. / 1024.), sign(xy) * frac + .5);
 		}
-
+	]], [[
 		void Unpack_UnitPair4 (vec4 xy, out vec4 x, out vec4 y)
 		{
 			P_UV vec4 axy = abs(xy);
@@ -46,7 +43,4 @@ function M.AddUnpack_UnitPair ()
 			y = sign(xy) * frac + .5;
 		}
 	]]
-end
-
--- Export the module.
-return M
+}
