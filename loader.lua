@@ -101,7 +101,7 @@ local DependsOn = {}
 local IgnoreThese = {}
 
 for _, v in ipairs{
-	"if", "while", -- keywords
+	"if", "return", "while", -- keywords
 	"bool", "int", "float", -- singleton constructors
 	"bvec2", "bvec3", "bvec4", -- vector / matrix constructors
 	"ivec2", "ivec3", "ivec4",
@@ -117,7 +117,8 @@ for _, v in ipairs{
 	"CoronaVertexUserData", -- Corona data-passing
 	"CoronaSampler0", "CoronaSampler1", -- Corona samplers
 	"CoronaContentScale", "CoronaDeltaTime", "CoronaTotalTime", "CoronaTexCoord", "CoronaTexelSize", -- Corona environment variables
-	"CoronaColorScale" -- Corona functions
+	"CoronaColorScale", -- Corona functions
+	"FragmentKernel", "VertexKernel" -- Kernel mains
 } do
 	IgnoreThese[v] = true
 end
@@ -194,6 +195,7 @@ LoadFunctions("bump")
 LoadFunctions("neighbors")
 LoadFunctions("simplex")
 LoadFunctions("sphere")
+LoadFunctions("texels")
 LoadFunctions("unpack")
 
 -- --
@@ -201,8 +203,8 @@ local List, Marks = {}, {}
 
 --
 local function Visit (index)
-	if Marks[index] == nil then
-		Marks[index] = false
+	if not Marks[index] then
+		Marks[index] = true
 
 		local deps = DependsOn[index]
 
