@@ -39,6 +39,38 @@ local upper = string.upper
 -- Exports --
 local M = {}
 
+-- --
+local IgnoreThese = {}
+
+for _, v in ipairs{
+	"for", "if", "return", "while", -- keywords
+	"bool", "int", "float", -- singleton constructors
+	"bvec2", "bvec3", "bvec4", -- vector / matrix constructors
+	"ivec2", "ivec3", "ivec4",
+	"mat2", "mat3", "mat4",
+	"vec2", "vec3", "vec4",
+	"radians", "degrees", "sin", "cos", "tan", "atan", "asin", "acos", -- angle / trig
+	"pow", "exp", "log", "exp2", "log2", "sqrt", "inversesqrt", -- exponential
+	"abs", "sign", "floor", "ceil", "fract", "mod", "min", "max", "clamp", "mix", "step", "smoothstep", -- common
+	"length", "distance", "dot", "cross", "normalize", "faceforward", "reflect", "refract", -- geometric
+	"matrixCompMult", -- matrix
+	"lessThan", "lessThanEqual", "greaterThan", "greaterThanEqual", "equal", "notEqual", "any", "all", "not", -- vector relational
+	"texture2D", "texture2DProj", "textureCube", "texture2DLod", "texture2DProjLod", "textureCubeLod", -- texture lookup
+	"CoronaVertexUserData", -- Corona data-passing
+	"CoronaSampler0", "CoronaSampler1", -- Corona samplers
+	"CoronaContentScale", "CoronaDeltaTime", "CoronaTotalTime", "CoronaTexCoord", "CoronaTexelSize", -- Corona environment variables
+	"CoronaColorScale", -- Corona functions
+	"FragmentKernel", "VertexKernel" -- Kernel mains
+} do
+	IgnoreThese[v] = true
+end
+-- TODO: struct constructors need own handling... :/
+
+--
+local function Accepts (ignore, what)
+	return not (IgnoreThese[what] or (ignore and ignore[what]))
+end
+
 --
 local function SlashComment (str)
 	return sub(str, -1) == "\n" and "\n" or ""
@@ -73,6 +105,15 @@ end
 -- --
 local Code, Names, ID = {}, {}, 1
 
+-- --
+local IdentifierPatt = "[_%a][_%w]*"
+
+-- --
+local SpacesPatt = "%s*"
+
+-- --
+local AssignmentPatt = "(" .. IdentifierPatt .. ")" .. SpacesPatt .. "="
+
 --
 local function LoadConstants (input)
 	local ignore, f, s, v = GetInputAndIgnoreList(input)
@@ -80,8 +121,8 @@ local function LoadConstants (input)
 	for _, str in f, s, v do
 		str = EatComments(str)
 
-		for name in gmatch(str, "([_%w]+)%s*=") do
-			if not (ignore and ignore[name]) then
+		for name in gmatch(str, AssignmentPatt) do
+			if Accepts(ignore, name) then
 				Names[name] = ID
 			end
 		end
@@ -98,58 +139,14 @@ LoadConstants("constants")
 local DependsOn = {}
 
 -- --
-local IgnoreThese = {}
+local BracesPatt = "%b{}"
+local ParensPatt = "%b()"
+local PunctPatt = "(%p?)"
 
-for _, v in ipairs{
-	"if", "return", "while", -- keywords
-	"bool", "int", "float", -- singleton constructors
-	"bvec2", "bvec3", "bvec4", -- vector / matrix constructors
-	"ivec2", "ivec3", "ivec4",
-	"mat2", "mat3", "mat4",
-	"vec2", "vec3", "vec4",
-	"radians", "degrees", "sin", "cos", "tan", "atan", "asin", "acos", -- angle / trig
-	"pow", "exp", "log", "exp2", "log2", "sqrt", "inversesqrt", -- exponential
-	"abs", "sign", "floor", "ceil", "fract", "mod", "min", "max", "clamp", "mix", "step", "smoothstep", -- common
-	"length", "distance", "dot", "cross", "normalize", "faceforward", "reflect", "refract", -- geometric
-	"matrixCompMult", -- matrix
-	"lessThan", "lessThanEqual", "greaterThan", "greaterThanEqual", "equal", "notEqual", "any", "all", "not", -- vector relational
-	"texture2D", "texture2DProj", "textureCube", "texture2DLod", "texture2DProjLod", "textureCubeLod", -- texture lookup
-	"CoronaVertexUserData", -- Corona data-passing
-	"CoronaSampler0", "CoronaSampler1", -- Corona samplers
-	"CoronaContentScale", "CoronaDeltaTime", "CoronaTotalTime", "CoronaTexCoord", "CoronaTexelSize", -- Corona environment variables
-	"CoronaColorScale", -- Corona functions
-	"FragmentKernel", "VertexKernel" -- Kernel mains
-} do
-	IgnoreThese[v] = true
-end
-
---
-local function Ignore (ignore, what)
-	if IgnoreThese[what] then
-		return true
-	elseif ignore and ignore[what] then
-		return true
-	else
-		local first = sub(what, 1, 1)
-
-		return first ~= "_" and lower(first) == upper(first)
-	end
-end
-
---
-local function IterCalls (str)
-	return gmatch(str, "([_%w]+)%s*%b()%s*(%p?)")
-end
-
---
-local function IterDefs (str)
-	return gmatch(str, "([_%w]+)%s*%b()%s*%b{}")
-end
-
---
-local function IterVars (str)
-	return gmatch(str, "([_%w]+)%s*(%p?)")
-end
+-- --
+local IterCallsPatt = "(" .. IdentifierPatt .. ")" .. SpacesPatt .. ParensPatt .. SpacesPatt .. PunctPatt
+local IterDefsPatt = "(" .. IdentifierPatt .. ")" .. SpacesPatt .. ParensPatt .. SpacesPatt .. BracesPatt
+local IterVarsPatt = "(" .. IdentifierPatt .. ")" .. SpacesPatt .. PunctPatt
 
 --
 local function LoadFunctions (input)
@@ -161,7 +158,7 @@ local function LoadFunctions (input)
 
 		str = EatComments(str)
 
-		for name, token in IterVars(str) do
+		for name, token in gmatch(str, IterVarsPatt) do
 			if token ~= "(" and token ~= "{" and Names[name] then
 				depends_on = depends_on or {}
 
@@ -170,8 +167,8 @@ local function LoadFunctions (input)
 		end
 
 		--
-		for name, token in IterCalls(str) do
-			if token ~= "{" and not (Ignore(ignore, name)) then
+		for name, token in gmatch(str, IterCallsPatt) do
+			if token ~= "{" and Accepts(ignore, name) then
 				depends_on = depends_on or {}
 
 				depends_on[name] = true
@@ -179,8 +176,8 @@ local function LoadFunctions (input)
 		end
 
 		--
-		for name in IterDefs(str) do
-			if not Ignore(ignore, name) then
+		for name in gmatch(str, IterDefsPatt) do
+			if Accepts(ignore, name) then
 				Names[name] = ID
 			end
 		end
@@ -257,13 +254,13 @@ local function Include (code)
 	local collect
 
 	--
-	for name in IterVars(code) do
+	for name in gmatch(code, IterVarsPatt) do
 		collect = CollectName(collect, name)
 	end
 
 	--
-	for name, token in IterCalls(code) do
-		if token ~= "{" and not Ignore(nil, name) then
+	for name, token in gmatch(code, IterCallsPatt) do
+		if token ~= "{" and Accepts(nil, name) then
 			collect = CollectName(collect, name)
 		end
 	end

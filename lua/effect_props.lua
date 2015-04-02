@@ -28,7 +28,7 @@ local getmetatable = getmetatable
 local setmetatable = setmetatable
 
 -- Modules --
-local pack = require("corona_shader.lua.pack")
+local unit_pair = require("corona_shader.lua.pack.unit_pair")
 
 -- Cookies --
 local _general = {}
@@ -57,7 +57,7 @@ function M.AddProperty_UnitPairVertex (kernel, index, prop1, prop2, combo, a, b)
 				local combo, k2 = kdata.first[k], kdata.paired_to[k]
 
 				if k2 then
-					local u1, u2 = pack.UnitPair_XY(t[combo or kdata.first[k2]])
+					local u1, u2 = unit_pair.ToXY(t[combo or kdata.first[k2]])
 
 					return combo and u1 or u2
 				end
@@ -81,12 +81,12 @@ function M.AddProperty_UnitPairVertex (kernel, index, prop1, prop2, combo, a, b)
 
 				--
 				if not (v and v2) then
-					local u1, u2 = pack.UnitPair_XY(t[combo])
+					local u1, u2 = unit_pair.ToXY(t[combo])
 
 					v, v2 = v or u1, v2 or u2
 				end
 
-				t[combo] = pack.XY_UnitPair(v, v2)
+				t[combo] = unit_pair.FromXY(v, v2)
 			else
 				return "none"
 			end
@@ -96,7 +96,7 @@ function M.AddProperty_UnitPairVertex (kernel, index, prop1, prop2, combo, a, b)
 	--
 	kdata.paired_to[prop1], kdata.paired_to[prop2], kdata.properties = prop2, prop1, props
 
-	vdata[#vdata + 1] = pack.VertexDatum_UnitPair(combo, index, a, b)
+	vdata[#vdata + 1] = unit_pair.VertexDatum(combo, index, a, b)
 
 	PropertyData[kernel], kernel.vertexData, kdata.first[prop1] = kdata, vdata, combo
 end
