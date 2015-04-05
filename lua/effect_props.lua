@@ -24,131 +24,138 @@
 --
 
 -- Standard library imports --
+local assert = assert
+local format = string.format
 local getmetatable = getmetatable
 local setmetatable = setmetatable
-
--- Modules --
-local unit_pair = require("corona_shader.lua.pack.unit_pair")
-
--- Cookies --
-local _general = {}
+local pairs = pairs
 
 -- Exports --
 local M = {}
+
+-- --
+local Keys = {}
+
+-- --
+local Handlers = {}
+
+--- DOCME
+function M.AddPropertyHandler (name, get, set, init, has_prop, keys)
+	--
+	for i = 1, #(keys or ""), 2 do
+		assert(not Keys[keys[i]], "Key already in use")
+	end
+
+	--
+	local handler = { get = get, set = set, init = init, has_prop = has_prop }
+
+	for i = 1, #(keys or ""), 2 do
+		Keys[keys[i]] = keys[i]
+
+		handler[#handler + 1] = keys[i]
+		handler[#handler + 1] = not not keys[i + 1]
+	end
+
+	Handlers[name] = handler
+end
 
 -- --
 local PropertyData = setmetatable({}, { __mode = "k" })
 
 --
 local function GetPropertyData (kernel)
-	return PropertyData[kernel] or { paired_to = {}, first = {} }
+	return PropertyData[kernel] or { handlers = {}, hstate = {} }
 end
 
 --- DOCME
-function M.AddProperty_UnitPairVertex (kernel, index, prop1, prop2, combo, a, b)
-	local kdata, vdata = GetPropertyData(kernel), kernel.vertexData or {}
-	local props = kdata.properties or {
-		id = ("%s.%s"):format(kernel.category, kernel.name), needs_state = true,
-
-		__index = function(t, k, state)
+function M.AddVertexProperty (kernel, handler_name, vprop, ...)
+	local pdata, vdata = GetPropertyData(kernel), kernel.vertexData or {}
+	local props = pdata.properties or {
+		get = function(t, k, state)
 			local v = state[k]
 
 			if v == nil then
-				local combo, k2 = kdata.first[k], kdata.paired_to[k]
+				local hstate = pdata.hstate
 
-				if k2 then
-					local u1, u2 = unit_pair.ToXY(t[combo or kdata.first[k2]])
+				for handler in pairs(pdata.handlers) do
+					v = handler.get(t, k, state, hstate)
 
-					return combo and u1 or u2
+					if v ~= nil then
+						return v
+					end
 				end
 			end
 		end,
 
-		__newindex = function(t, k, v, state)
-			local k2 = kdata.paired_to[k]
+		set = function(t, k, v, state)
+			local hstate = pdata.hstate
 
-			if k2 then
-				state[k] = v
-
-				--
-				local combo, v2 = kdata.first[k]
-
-				if combo then
-					v2 = state[k2]
-				else
-					combo, v, v2 = kdata.first[k2], state[k2], v
+			for handler in pairs(pdata.handlers) do
+				if handler.set(t, k, v, state, hstate) then
+					return
 				end
-
-				--
-				if not (v and v2) then
-					local u1, u2 = unit_pair.ToXY(t[combo])
-
-					v, v2 = v or u1, v2 or u2
-				end
-
-				t[combo] = unit_pair.FromXY(v, v2)
-			else
-				return "none"
 			end
+
+			return "none"
 		end
 	}
 
 	--
-	kdata.paired_to[prop1], kdata.paired_to[prop2], kdata.properties = prop2, prop1, props
+	local handler = assert(Handlers[handler_name], "Invalid handler")
 
-	vdata[#vdata + 1] = unit_pair.VertexDatum(combo, index, a, b)
+	if not pdata.handlers[handler] then
+		for i = 1, #handler, 2 do
+			pdata.hstate[handler[i]] = handler[i + 1] and {}
+		end
 
-	PropertyData[kernel], kernel.vertexData, kdata.first[prop1] = kdata, vdata, combo
+		pdata.handlers[handler] = true
+	end
+
+	handler.init(pdata.hstate, ...)
+
+	--
+	pdata.properties = props
+
+	vdata[#vdata + 1] = vprop
+
+	PropertyData[kernel], kernel.vertexData = pdata, vdata
 end
 
 -- --
-local AugmentedMT = setmetatable({}, { __mode = "k" })
+local Augmented = setmetatable({}, { __mode = "v" })
 
 --
-local function GetID (props)
-	if props and props.id ~= nil then
-		return props.id
-	else
-		return _general
-	end
-end
-
---
-local function GetMT (effect, kernel)
+local function GetAccessors (effect, kernel)
 	local effect_mt, props = getmetatable(effect), PropertyData[kernel].properties
-	local id, set = GetID(props), AugmentedMT[effect_mt]
+	local name = format("%s.%s.%s", kernel.category, kernel.group or "custom", kernel.name)
 
-	if props and not (set and set[id]) then
-		set = set or {}
+	if props and not Augmented[name] then
+		local get, index = props.get, effect_mt.__index
+		local set, newindex = props.set, effect_mt.__newindex
+		local state = {}
 
-		local old_index, old_newindex = effect_mt.__index, effect_mt.__newindex
-		local new_index, new_newindex = props.__index, props.__newindex
-		local state = props.needs_state and {}
-
-		set[id] = {
-			-- __index metamethod --
-			__index = new_index and function(t, k)
-				local v = old_index(t, k)
+		Augmented[name] = {
+			-- Getter --
+			get = get and function(t, k, object)
+				local v = index(t, k)
 
 				if v ~= nil then
 					return v
 				else
-					return new_index(t, k, state)
+					return get(t, k, state, object)
 				end
-			end or old_index,
+			end or index,
 
-			-- __newindex metamethod --
-			__newindex = new_newindex and function(t, k, v)
-				if new_newindex(t, k, v, state) == "none" then
-					old_newindex(t, k, v)
+			-- Setter --
+			set = set and function(t, k, v, object)
+				if set(t, k, v, state, object) == "none" then
+					newindex(t, k, v)
 				end
-			end or old_newindex
+			end or newindex
 		}
-
-		AugmentedMT[effect_mt] = set
 	end
 
-	return set and set[id]
+	return Augmented[name]
 end
 
 -- --
@@ -159,30 +166,51 @@ function M.AugmentEffect (object, kernel)
 	local effect = object.fill.effect
 
 	if not Proxy[effect] then
-		local mt = GetMT(effect, kernel)
+		local prop_acc = GetAccessors(effect, kernel)
 
-		if mt then
-			Proxy[effect] = mt
+		if prop_acc then
+			Proxy[effect] = prop_acc
 		end
 	end
 end
 
 --- DOCME
-function M.FoundInProperties (kernel, prop)
-	local kdata = PropertyData[kernel] -- TODO: Assumes [0, 1]...
+function M.FoundInProperties (kernel, prop) -- todo: prefix
+	local pdata = PropertyData[kernel]
 
-	return (kdata and kdata.paired_to[prop]) ~= nil
+	if pdata then
+		local hstate = pdata.hstate
+
+		for handler in pairs(pdata.handlers) do
+			local does_have, min, max = handler.has_prop(hstate, prop)
+
+			if does_have then
+				return true, min, max
+			end
+		end
+	end
+
+	return false
+end
+
+--
+local function GetEffect (object, prefix)
+	local effect = object.fill.effect
+
+	if prefix then
+		return effect[prefix]
+	else
+		return effect
+	end
 end
 
 --- DOCME
 function M.GetEffectProperty (object, prefix, prop)
-	local effect = object.fill.effect
+	local effect = GetEffect(object, prefix)
 	local proxy = Proxy[effect]
 
-	if prefix then
-		return effect[prefix][prop] -- todo: if proxied?
-	elseif proxy then
-		return proxy.__index(effect, prop)
+	if proxy then
+		return proxy.get(effect, prop, object)
 	else
 		return effect[prop]
 	end
@@ -190,13 +218,11 @@ end
 
 --- DOCME
 function M.SetEffectProperty (object, prefix, prop, v)
-	local effect = object.fill.effect
+	local effect = GetEffect(object, prefix)
 	local proxy = Proxy[effect]
 
-	if prefix then
-		effect[prefix][prop] = v -- todo: if proxied?
-	elseif proxy then
-		proxy.__newindex(effect, prop, v)
+	if proxy then
+		proxy.set(effect, prop, v, object)
 	else
 		effect[prop] = v
 	end

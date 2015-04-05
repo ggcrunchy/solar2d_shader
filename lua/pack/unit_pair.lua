@@ -27,11 +27,75 @@
 local abs = math.abs
 local floor = math.floor
 
+-- Modules --
+local effect_props = require("corona_shader.lua.effect_props")
+
 -- Cached module references --
 local _FromXY_
+local _ToXY_
+local _VertexDatum_
 
 -- Exports --
 local M = {}
+
+--
+effect_props.AddPropertyHandler("unit_pair",
+
+-- Getter --
+function(t, k, _, hstate)
+	local combo, k2 = hstate.first[k], hstate.paired_to[k]
+
+	if k2 then
+		local u1, u2 = _ToXY_(t[combo or hstate.first[k2]])
+
+		return combo and u1 or u2
+	end
+end,
+
+-- Setter --
+function(t, k, v, state, hstate)
+	local k2 = hstate.paired_to[k]
+
+	if k2 then
+		state[k] = v
+
+		--
+		local combo, v2 = hstate.first[k]
+
+		if combo then
+			v2 = state[k2]
+		else
+			combo, v, v2 = hstate.first[k2], state[k2], v
+		end
+
+		--
+		if not (v and v2) then
+			local u1, u2 = _ToXY_(t[combo])
+
+			v, v2 = v or u1, v2 or u2
+		end
+
+		t[combo] = _FromXY_(v, v2)
+
+		return true
+	end
+end,
+
+-- Initialize --
+function(hstate, prop1, prop2, combo)
+	hstate.paired_to[prop1], hstate.paired_to[prop2], hstate.first[prop1] = prop2, prop1, combo
+end,
+
+-- Has Property --
+function(hstate, prop)
+	return hstate.paired_to[prop], 0, 1
+end, { "first", true, "paired_to", true })
+
+
+--- DOCME
+function M.AddVertexProperty (kernel, index, prop1, prop2, combo, a, b)
+	effect_props.AddVertexProperty(kernel, "unit_pair", _VertexDatum_(combo, index, a, b), prop1, prop2, combo)
+end
 
 --- DOCME
 -- @number x A value &isin; [0, 1]...
@@ -71,6 +135,8 @@ end
 
 -- Cache module members.
 _FromXY_ = M.FromXY
+_ToXY_ = M.ToXY
+_VertexDatum_ = M.VertexDatum
 
 -- Export the module.
 return M

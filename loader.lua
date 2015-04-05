@@ -36,6 +36,9 @@ local sub = string.sub
 local type = type
 local upper = string.upper
 
+-- Cached module references --
+local _VertexShader_
+
 -- Exports --
 local M = {}
 
@@ -250,17 +253,37 @@ local function CollectName (collect, name)
 end
 
 --
-local function Include (code)
-	local collect
+local function BuildIgnoreList (code, patt, ignore)
+	for name in gmatch(code, patt) do
+		if Accepts(nil, name) then
+			ignore = ignore or {}
 
-	--
-	for name in gmatch(code, IterVarsPatt) do
-		collect = CollectName(collect, name)
+			ignore[name] = true
+		end
 	end
 
+	return ignore
+end
+
+--
+local function Include (code)
 	--
+	local ignore
+
+	ignore = BuildIgnoreList(code, AssignmentPatt, ignore)
+	ignore = BuildIgnoreList(code, IterDefsPatt, ignore)
+
+	--
+	local collect
+
+	for name in gmatch(code, IterVarsPatt) do
+		if Accepts(ignore, name) then 
+			collect = CollectName(collect, name)
+		end
+	end
+
 	for name, token in gmatch(code, IterCallsPatt) do
-		if token ~= "{" and Accepts(nil, name) then
+		if token ~= "{" and Accepts(ignore, name) then
 			collect = CollectName(collect, name)
 		end
 	end
@@ -295,13 +318,7 @@ local Prelude = [[
 
 --- DOCME
 function M.FragmentShader (code, suppress_precision)
-	code = EatComments(code)
-
-	local include = Include(code)
-
-	if include then
-		code = include .. "\n" .. code
-	end
+	code = _VertexShader_(code)
 
 	if not suppress_precision then
 		code = Prelude .. code
@@ -312,14 +329,19 @@ end
 
 --- DOCME
 function M.VertexShader (code)
+	code = EatComments(code)
+
 	local include = Include(code)
 
 	if include then
-		code = include .. "\n" .. code
+		return include .. "\n" .. code
+	else
+		return code
 	end
-
-	return code
 end
+
+-- Cache module members.
+_VertexShader_ = M.VertexShader
 
 -- Export the module.
 return M
