@@ -1,4 +1,4 @@
---- Lua-side data-packing routines.
+--- Lua-side data-packing routines for [0, 1] x [0, 1] pairs.
 
 --
 -- Permission is hereby granted, free of charge, to any person obtaining
@@ -39,57 +39,61 @@ local _VertexDatum_
 local M = {}
 
 --
-effect_props.AddPropertyHandler("unit_pair",
+effect_props.DefinePropertyHandler("unit_pair",
 
--- Getter --
-function(t, k, _, hstate)
-	local combo, k2 = hstate.first[k], hstate.paired_to[k]
+	-- Getter --
+	function(t, k, _, hstate)
+		local combo, k2 = hstate.first[k], hstate.paired_to[k]
 
-	if k2 then
-		local u1, u2 = _ToXY_(t[combo or hstate.first[k2]])
+		if k2 then
+			local u1, u2 = _ToXY_(t[combo or hstate.first[k2]])
 
-		return combo and u1 or u2
-	end
-end,
-
--- Setter --
-function(t, k, v, state, hstate)
-	local k2 = hstate.paired_to[k]
-
-	if k2 then
-		state[k] = v
-
-		--
-		local combo, v2 = hstate.first[k]
-
-		if combo then
-			v2 = state[k2]
-		else
-			combo, v, v2 = hstate.first[k2], state[k2], v
+			return combo and u1 or u2
 		end
+	end,
 
-		--
-		if not (v and v2) then
-			local u1, u2 = _ToXY_(t[combo])
+	-- Setter --
+	function(t, k, v, state, hstate)
+		local k2 = hstate.paired_to[k]
 
-			v, v2 = v or u1, v2 or u2
+		if k2 then
+			state[k] = v
+
+			--
+			local combo, v2 = hstate.first[k]
+
+			if combo then
+				v2 = state[k2]
+			else
+				combo, v, v2 = hstate.first[k2], state[k2], v
+			end
+
+			--
+			if not (v and v2) then
+				local u1, u2 = _ToXY_(t[combo])
+
+				v, v2 = v or u1, v2 or u2
+			end
+
+			t[combo] = _FromXY_(v, v2)
+
+			return true
 		end
+	end,
 
-		t[combo] = _FromXY_(v, v2)
+	-- Initialize --
+	function(hstate, prop1, prop2, combo)
+		hstate.paired_to[prop1], hstate.paired_to[prop2], hstate.first[prop1] = prop2, prop1, combo
+	end,
 
-		return true
-	end
-end,
+	-- Has Property --
+	function(hstate, prop)
+		return hstate.paired_to[prop], 0, 1
+	end,
 
--- Initialize --
-function(hstate, prop1, prop2, combo)
-	hstate.paired_to[prop1], hstate.paired_to[prop2], hstate.first[prop1] = prop2, prop1, combo
-end,
-
--- Has Property --
-function(hstate, prop)
-	return hstate.paired_to[prop], 0, 1
-end, { "first", true, "paired_to", true })
+	-- Keys --
+	{ "first", true, "paired_to", true }
+)
 
 
 --- DOCME
@@ -124,14 +128,6 @@ function M.VertexDatum (name, index, defx, defy)
 		index = index
 	}
 end
-
--- triple, quad...
-
--- Todo: [0, 1], [0, 1)
--- Integer in [0, 1023], [0, 1); [0, 1023], [0, 1]
--- Sign meant for other purpose: need to increment integer to guard against 0, limits range to [0, 1022]
--- Two integers in [0, 511]... or four...
--- Quantized to lattice of size 1023, with dimensions [0, 2^m), [0, 2^n), s.t. n + m = 10
 
 -- Cache module members.
 _FromXY_ = M.FromXY

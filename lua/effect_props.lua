@@ -27,37 +27,12 @@
 local assert = assert
 local format = string.format
 local getmetatable = getmetatable
+local loaded = package.loaded
 local setmetatable = setmetatable
 local pairs = pairs
 
 -- Exports --
 local M = {}
-
--- --
-local Keys = {}
-
--- --
-local Handlers = {}
-
---- DOCME
-function M.AddPropertyHandler (name, get, set, init, has_prop, keys)
-	--
-	for i = 1, #(keys or ""), 2 do
-		assert(not Keys[keys[i]], "Key already in use")
-	end
-
-	--
-	local handler = { get = get, set = set, init = init, has_prop = has_prop }
-
-	for i = 1, #(keys or ""), 2 do
-		Keys[keys[i]] = keys[i]
-
-		handler[#handler + 1] = keys[i]
-		handler[#handler + 1] = not not keys[i + 1]
-	end
-
-	Handlers[name] = handler
-end
 
 -- --
 local PropertyData = setmetatable({}, { __mode = "k" })
@@ -67,8 +42,16 @@ local function GetPropertyData (kernel)
 	return PropertyData[kernel] or { handlers = {}, hstate = {} }
 end
 
+-- --
+local Keys = {}
+
+-- --
+local Handlers = {}
+
 --- DOCME
 function M.AddVertexProperty (kernel, handler_name, vprop, ...)
+	assert(not kernel.graph, "Cannot add vertex property to multi-pass kernel")
+
 	local pdata, vdata = GetPropertyData(kernel), kernel.vertexData or {}
 	local props = pdata.properties or {
 		get = function(t, k, state)
@@ -163,19 +146,53 @@ local Proxy = setmetatable({}, { __mode = "k" })
 
 --- DOCME
 function M.AugmentEffect (object, kernel)
-	local effect = object.fill.effect
+	local effect, graph = object.fill.effect, kernel.graph
 
-	if not Proxy[effect] then
-		local prop_acc = GetAccessors(effect, kernel)
+	--
+	if graph then
+		for k, v in pairs(graph.nodes) do
+			local ekernel = assert(effect[k], "Sub-effect not loaded")
+			local sub_effect = effect[k]
 
-		if prop_acc then
-			Proxy[effect] = prop_acc
+			if sub_effect and not Proxy[sub_effect] then
+				Proxy[sub_effect] = GetAccessors(sub_effect, ekernel)
+			end
 		end
+
+	--
+	elseif not Proxy[effect] then
+		Proxy[effect] = GetAccessors(effect, kernel)
 	end
 end
 
 --- DOCME
-function M.FoundInProperties (kernel, prop) -- todo: prefix
+function M.DefinePropertyHandler (name, get, set, init, has_prop, keys)
+	--
+	for i = 1, #(keys or ""), 2 do
+		assert(not Keys[keys[i]], "Key already in use")
+	end
+
+	--
+	local handler = { get = get, set = set, init = init, has_prop = has_prop }
+
+	for i = 1, #(keys or ""), 2 do
+		Keys[keys[i]] = keys[i]
+
+		handler[#handler + 1] = keys[i]
+		handler[#handler + 1] = not not keys[i + 1]
+	end
+
+	Handlers[name] = handler
+end
+
+--- DOCME
+function M.FoundInProperties (kernel, prefix, prop)
+	--
+	if prefix then
+		kernel = assert(kernel.graph, "Kernel is not multi-pass").nodes[prefix]
+	end
+
+	--
 	local pdata = PropertyData[kernel]
 
 	if pdata then
