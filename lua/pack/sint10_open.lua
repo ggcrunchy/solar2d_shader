@@ -24,3 +24,6 @@
 --
 -- [ MIT license: http://www.opensource.org/licenses/mit-license.php ]
 --
+
+-- Much like uint10_open, just adding the sign afterward (if used)
+-- In GLSL, just extract the sign first

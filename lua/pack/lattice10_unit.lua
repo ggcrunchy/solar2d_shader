@@ -23,3 +23,7 @@
 --
 -- [ MIT license: http://www.opensource.org/licenses/mit-license.php ]
 --
+
+-- For lattice, choose resoltions (standard will be 32x32) and corresponding functions,
+-- for Lua and GLSL; fraction will be as per unit_pair
+-- Rest is like normal grid addressing

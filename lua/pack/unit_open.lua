@@ -22,3 +22,5 @@
 --
 -- [ MIT license: http://www.opensource.org/licenses/mit-license.php ]
 --
+
+-- Fairly basic, [0, 1) IS the fraction, then just divide integer by 1024

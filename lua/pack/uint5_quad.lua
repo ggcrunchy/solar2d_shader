@@ -22,3 +22,15 @@
 --
 -- [ MIT license: http://www.opensource.org/licenses/mit-license.php ]
 --
+
+-- To GLSL form:
+-- Combine 5-bit numbers into 10-bit numbers: 32 * num1 + num2
+-- Turn second one into fraction: num / 1024
+-- Negative-adjust that second one
+-- Combine!
+
+-- From GLSL form:
+-- Recover float
+-- Separate integer and fraction
+-- Integer -> mod 32, (rest - modded) / 32
+-- Fraction -> mult by 1024, do the same (more or less)

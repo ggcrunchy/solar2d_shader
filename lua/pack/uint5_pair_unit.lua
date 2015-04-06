@@ -22,3 +22,5 @@
 --
 -- [ MIT license: http://www.opensource.org/licenses/mit-license.php ]
 --
+
+-- See unit5_quad, unit_pair, etc.

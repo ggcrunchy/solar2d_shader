@@ -22,3 +22,5 @@
 --
 -- [ MIT license: http://www.opensource.org/licenses/mit-license.php ]
 --
+
+-- Simple, just straight up add the numbers
