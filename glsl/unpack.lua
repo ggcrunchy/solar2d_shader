@@ -32,7 +32,7 @@ return {
 		P_UV float axy = abs(xy);
 		P_UV float frac = fract(axy);
 
-		return vec2((axy - frac) * (1. / 1024.), sign(xy) * frac + .5);
+		return vec2((axy - frac) / 1023., sign(xy) * frac + .5);
 	}
 ]], [[
 	void Unpack_UnitPair4 (vec4 xy, out vec4 x, out vec4 y)
@@ -40,7 +40,7 @@ return {
 		P_UV vec4 axy = abs(xy);
 		P_UV vec4 frac = fract(axy);
 
-		x = (axy - frac) * (1. / 1024.);
+		x = (axy - frac) / 1023.;
 		y = sign(xy) * frac + .5;
 	}
 ]]

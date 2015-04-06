@@ -1,4 +1,4 @@
---- Lua-side data-packing routines for [0, 1] x [0, 1] pairs.
+--- Utilities for data-packing routines.
 
 --
 -- Permission is hereby granted, free of charge, to any person obtaining
@@ -24,59 +24,74 @@
 --
 
 -- Standard library imports --
-local abs = math.abs
-local floor = math.floor
 
 -- Modules --
 local effect_props = require("corona_shader.lua.effect_props")
-local pack_utils = require("corona_shader.lua.pack.utils")
-
--- Cached module references --
-local _FromXY_
-local _VertexDatum_
 
 -- Exports --
 local M = {}
 
 --- DOCME
-function M.AddVertexProperty (kernel, index, prop1, prop2, combo, a, b)
-	effect_props.AddVertexProperty(kernel, "unit_pair", _VertexDatum_(combo, index, a, b), prop1, prop2, combo)
+function M.DefinePairPropertyHandler (name, to_xy, from_xy, min_value, max_value, first_key, paired_to_key)
+	first_key = first_key or {}
+	paired_to_key = paired_to_key or {}
+
+	effect_props.DefinePropertyHandler(name,
+
+		-- Getter --
+		function(t, k, _, hstate)
+			local combo, k2 = hstate[first_key][k], hstate[paired_to_key][k]
+
+			if k2 then
+				local u1, u2 = to_xy(t[combo or hstate[first_key][k2]])
+
+				return combo and u1 or u2
+			end
+		end,
+
+		-- Setter --
+		function(t, k, v, state, hstate)
+			local k2 = hstate[paired_to_key][k]
+
+			if k2 then
+				state[k] = v
+
+				--
+				local combo, v2 = hstate[first_key][k]
+
+				if combo then
+					v2 = state[k2]
+				else
+					combo, v, v2 = hstate[first_key][k2], state[k2], v
+				end
+
+				--
+				if not (v and v2) then
+					local u1, u2 = to_xy(t[combo])
+
+					v, v2 = v or u1, v2 or u2
+				end
+
+				t[combo] = from_xy(v, v2)
+
+				return true
+			end
+		end,
+
+		-- Initialize --
+		function(hstate, prop1, prop2, combo)
+			hstate[paired_to_key][prop1], hstate[paired_to_key][prop2], hstate[first_key][prop1] = prop2, prop1, combo
+		end,
+
+		-- Has Property --
+		function(hstate, prop)
+			return hstate[paired_to_key][prop], min_value, max_value
+		end,
+
+		-- Keys --
+		{ first_key, true, paired_to_key, true }
+	)
 end
-
---- DOCME
--- @number x A value &isin; [0, 1]...
--- @number y ...and another one.
--- @treturn number The packed value.
-function M.FromXY (x, y)
-	y = y - .5
-
-	return (y < 0 and -1 or 1) * (floor(1023 * x) + abs(y))
-end
-
---- DOCME
-function M.ToXY (pair)
-	local apair = abs(pair)
-	local xpart = floor(apair)
-
-	return xpart / 1023, (pair < 0 and -1 or 1) * (apair - xpart) + .5
-end
-
---- DOCME
-function M.VertexDatum (name, index, defx, defy)
-	return {
-		name = name,
-		default = _FromXY_(defx, defy),
-		min = -1023.5, max = 1023.5,
-		index = index
-	}
-end
-
---
-pack_utils.DefinePairPropertyHandler("unit_pair", M.ToXY, M.FromXY, 0, 1)
-
--- Cache module members.
-_FromXY_ = M.FromXY
-_VertexDatum_ = M.VertexDatum
 
 -- Export the module.
 return M
