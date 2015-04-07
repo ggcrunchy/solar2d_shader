@@ -96,10 +96,18 @@ end
 
 --
 local function GetInputAndIgnoreList (name)
-	local input, ignore = require("corona_shader.glsl." .. name)
+	local input = require("corona_shader.glsl." .. name)
 
 	if type(input) == "table" then
-		return input.ignore, ipairs(input)
+		local ignore
+
+		for i = 1, #(input.ignore or "") do
+			ignore = ignore or {}
+
+			ignore[input.ignore[i]] = true
+		end
+
+		return ignore, ipairs(input)
 	else
 		return nil, OneString, input
 	end
@@ -197,6 +205,7 @@ LoadFunctions("simplex")
 LoadFunctions("sphere")
 LoadFunctions("texels")
 LoadFunctions("unpack")
+LoadFunctions("worley")
 
 -- --
 local List, Marks = {}, {}
