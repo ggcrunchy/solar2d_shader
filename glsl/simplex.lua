@@ -210,7 +210,7 @@ return {
 
 		// Gradient mapping with an extra rotation.
 		vec2 grad2(vec2 p, float rot) {
-		#if ANISO_GRAD
+		#ifdef ANISO_GRAD
 		// Map from a line to a diamond such that a shift maps to a rotation.
 		  float u = permute(permute(p.x) + p.y) * K + rot; // Rotate by shift
 		  u = 4.0 * fract(u) - 2.0;

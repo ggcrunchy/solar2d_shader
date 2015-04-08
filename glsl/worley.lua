@@ -115,7 +115,7 @@ return {
 			vec4 d = dx * dx + dy * dy; // d11, d12, d21 and d22, squared
 
 			// Sort out the two smallest distances
-		#if WORLEY2x2_DUP_LESSER
+		#ifdef WORLEY2x2_DUP_LESSER
 			// Cheat and pick only F1
 			d.xy = min(d.xy, d.zw);
 			d.x = min(d.x, d.y);
@@ -262,7 +262,7 @@ return {
 			vec3 d33 = dx33 * dx33 + dy33 * dy33 + dz33 * dz33;
 
 			// Sort out the two smallest distances (F1, F2)
-		#if WORLEY3_DUP_LESSER
+		#ifdef WORLEY3_DUP_LESSER
 			// Cheat and sort out only F1
 			vec3 d1 = min(min(d11,d12), d13);
 			vec3 d2 = min(min(d21,d22), d23);
@@ -347,7 +347,7 @@ return {
 			vec4 d2 = dx2 * dx2 + dy2 * dy2 + dz2 * dz2; // z+1
 
 			// Sort out the two smallest distances (F1, F2)
-		#if WORLEY2x2x2_DUP_LESSER
+		#ifdef WORLEY2x2x2_DUP_LESSER
 			// Cheat and sort out only F1
 			d1 = min(d1, d2);
 			d1.xy = min(d1.xy, d1.wz);

@@ -329,7 +329,11 @@ end
 -- --
 local Prelude = [[
 	#ifdef GL_ES
-		precision mediump float;
+		#ifdef GL_FRAGMENT_PRECISION_HIGH
+			precision highp float;
+		#else
+			precision mediump float;
+		#endif
 	#endif
 
 ]]
