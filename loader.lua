@@ -47,6 +47,7 @@ local IgnoreThese = {}
 
 for _, v in ipairs{
 	"for", "if", "return", "while", -- keywords
+	"__FILE__", "__LINE__", "__VERSION__", "GL_ES", "GL_FRAGMENT_PRECISION_HIGH", -- predefined macros
 	"bool", "int", "float", -- singleton constructors
 	"bvec2", "bvec3", "bvec4", -- vector / matrix constructors
 	"ivec2", "ivec3", "ivec4",
@@ -67,7 +68,6 @@ for _, v in ipairs{
 } do
 	IgnoreThese[v] = true
 end
--- TODO: struct constructors need own handling... :/
 
 --
 local function Accepts (ignore, what)
@@ -157,6 +157,7 @@ local PunctPatt = "(%p?)"
 -- --
 local IterCallsPatt = "(" .. IdentifierPatt .. ")" .. SpacesPatt .. ParensPatt .. SpacesPatt .. PunctPatt
 local IterDefsPatt = "(" .. IdentifierPatt .. ")" .. SpacesPatt .. ParensPatt .. SpacesPatt .. BracesPatt
+local IterStructsPatt = "struct%s+(" .. IdentifierPatt .. ")"
 local IterVarsPatt = "(" .. IdentifierPatt .. ")" .. SpacesPatt .. PunctPatt
 
 --
@@ -188,6 +189,13 @@ local function LoadFunctions (input)
 
 		--
 		for name in gmatch(str, IterDefsPatt) do
+			if Accepts(ignore, name) then
+				Names[name] = ID
+			end
+		end
+
+		--
+		for name in gmatch(str, IterStructsPatt) do
 			if Accepts(ignore, name) then
 				Names[name] = ID
 			end
@@ -281,6 +289,7 @@ local function Include (code)
 
 	ignore = BuildIgnoreList(code, AssignmentPatt, ignore)
 	ignore = BuildIgnoreList(code, IterDefsPatt, ignore)
+	ignore = BuildIgnoreList(code, IterStructsPatt, ignore)
 
 	--
 	local collect
