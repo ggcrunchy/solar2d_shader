@@ -28,13 +28,10 @@ local concat = table.concat
 local gmatch = string.gmatch
 local gsub = string.gsub
 local ipairs = ipairs
-local lower = string.lower
 local pairs = pairs
 local require = require
 local sort = table.sort
-local sub = string.sub
 local type = type
-local upper = string.upper
 
 -- Cached module references --
 local _VertexShader_
@@ -79,24 +76,45 @@ for _, v in ipairs{
 	IgnoreThese[v] = true
 end
 
--- TODO: variable pattern needs some special handling so vector components don't show up, e.g. (%.)?%s* beforehand?
--- Also structure members...
--- Are arrays okay?
-
 --
 local function Accepts (ignore, what)
 	return not (IgnoreThese[what] or (ignore and ignore[what]))
 end
 
+-- --
+local SpacesPatt = "%s*"
+
 --
-local function SlashComment (str)
-	return sub(str, -1) == "\n" and "\n" or ""
+local function CommentC (before, up_to, comment, after, last)
+	local has_up_to = gsub(up_to, SpacesPatt, "") ~= ""
+	local has_after = gsub(after, SpacesPatt, "") ~= ""
+
+	if has_up_to and has_after then
+		local mid = gsub(comment, "[^\n]", "") ~= "" and "\n" or " "
+
+		return before .. up_to .. mid .. after .. last
+	elseif has_up_to then
+		return before .. up_to .. last
+	elseif has_after then
+		return before .. after .. last
+	else
+		return before
+	end
+end
+
+--
+local function CommentCPP (before, between, last)
+	if gsub(between, SpacesPatt, "") ~= "" then
+		return before .. between .. last
+	else
+		return before
+	end
 end
 
 --
 local function EatComments (str)
-	str = gsub(str, "/%*.*%*/", "")
-	str = gsub(str, "//[^\n]*\n?", SlashComment)
+	str = gsub(str, "(\n?)([^\n]-)/%*(.-)%*/([^\n]*)(\n?)", CommentC)
+	str = gsub(str, "(\n?)([^\n]-)//[^\n]*(\n?)", CommentCPP)
 
 	return str
 end
@@ -134,10 +152,10 @@ local Code, Names, ID = {}, {}, 1
 local IdentifierPatt = "[_%a][_%w]*"
 
 -- --
-local SpacesPatt = "%s*"
+local DotPatt = "(%.?)"
 
 -- --
-local AssignmentPatt = "(" .. IdentifierPatt .. ")" .. SpacesPatt .. "="
+local AssignmentPatt = DotPatt .. SpacesPatt .. "(" .. IdentifierPatt .. ")" .. SpacesPatt .. "="
 
 --
 local function LoadConstants (input)
@@ -146,8 +164,8 @@ local function LoadConstants (input)
 	for _, str in f, s, v do
 		str = EatComments(str)
 
-		for name in gmatch(str, AssignmentPatt) do
-			if Accepts(ignore, name) then
+		for dot, name in gmatch(str, AssignmentPatt) do
+			if dot == "" and Accepts(ignore, name) then
 				Names[name] = ID
 			end
 		end
@@ -168,11 +186,14 @@ local BracesPatt = "%b{}"
 local ParensPatt = "%b()"
 local PunctPatt = "(%p?)"
 
+-- Dummy capture (shader source is zero-terminated) for pattern consistency --
+local ZeroPatt = "(%z?)"
+
 -- --
 local IterCallsPatt = "(" .. IdentifierPatt .. ")" .. SpacesPatt .. ParensPatt .. SpacesPatt .. PunctPatt
-local IterDefsPatt = "(" .. IdentifierPatt .. ")" .. SpacesPatt .. ParensPatt .. SpacesPatt .. BracesPatt
-local IterStructsPatt = "struct%s+(" .. IdentifierPatt .. ")"
-local IterVarsPatt = "(" .. IdentifierPatt .. ")" .. SpacesPatt .. PunctPatt
+local IterDefsPatt = ZeroPatt .. "(" .. IdentifierPatt .. ")" .. SpacesPatt .. ParensPatt .. SpacesPatt .. BracesPatt
+local IterStructsPatt = ZeroPatt .. "struct%s+(" .. IdentifierPatt .. ")"
+local IterVarsPatt = DotPatt .. SpacesPatt .. "(" .. IdentifierPatt .. ")" .. SpacesPatt .. PunctPatt
 
 --
 local function LoadFunctions (input)
@@ -184,8 +205,8 @@ local function LoadFunctions (input)
 
 		str = EatComments(str)
 
-		for name, token in gmatch(str, IterVarsPatt) do
-			if token ~= "(" and token ~= "{" and Names[name] then
+		for dot, name, token in gmatch(str, IterVarsPatt) do
+			if dot == "" and token ~= "(" and token ~= "{" and Names[name] then
 				depends_on = depends_on or {}
 
 				depends_on[name] = true
@@ -202,14 +223,14 @@ local function LoadFunctions (input)
 		end
 
 		--
-		for name in gmatch(str, IterDefsPatt) do
+		for _, name in gmatch(str, IterDefsPatt) do
 			if Accepts(ignore, name) then
 				Names[name] = ID
 			end
 		end
 
 		--
-		for name in gmatch(str, IterStructsPatt) do
+		for _, name in gmatch(str, IterStructsPatt) do
 			if Accepts(ignore, name) then
 				Names[name] = ID
 			end
@@ -285,8 +306,8 @@ end
 
 --
 local function BuildIgnoreList (code, patt, ignore)
-	for name in gmatch(code, patt) do
-		if Accepts(nil, name) then
+	for dot, name in gmatch(code, patt) do
+		if dot == "" and Accepts(ignore, name) then
 			ignore = ignore or {}
 
 			ignore[name] = true
@@ -308,8 +329,8 @@ local function Include (code)
 	--
 	local collect
 
-	for name in gmatch(code, IterVarsPatt) do
-		if Accepts(ignore, name) then 
+	for dot, name in gmatch(code, IterVarsPatt) do
+		if dot == "" and Accepts(ignore, name) then 
 			collect = CollectName(collect, name)
 		end
 	end
@@ -340,8 +361,13 @@ local function Include (code)
 	end
 end
 
+--
+local function Pretty (str)
+	return gsub(str, "\t", "  ")
+end
+
 -- --
-local Prelude = [[
+local Prelude = Pretty[[
 	#ifdef GL_ES
 		#ifdef GL_FRAGMENT_PRECISION_HIGH
 			precision highp float;
@@ -353,10 +379,10 @@ local Prelude = [[
 ]]
 
 --- DOCME
-function M.FragmentShader (code, suppress_precision)
-	code = _VertexShader_(code)
+function M.FragmentShader (code, opts)
+	code = _VertexShader_(code, opts)
 
-	if not suppress_precision then
+	if not (opts and opts.suppress_precision) then
 		code = Prelude .. code
 	end
 
@@ -364,16 +390,20 @@ function M.FragmentShader (code, suppress_precision)
 end
 
 --- DOCME
-function M.VertexShader (code)
+function M.VertexShader (code, opts)
 	code = EatComments(code)
 
 	local include = Include(code)
 
 	if include then
-		return include .. "\n" .. code
-	else
-		return code
+		code = include .. "\n" .. code
 	end
+
+	if opts and opts.pretty then
+		code = Pretty(code)
+	end
+
+	return code
 end
 
 -- Cache module members.

@@ -33,7 +33,9 @@ return {
 	{
 		P_POSITION float dist_sq = dot(diff, diff);
 
-		if (dist_sq > 1.) discard;
+		#ifndef SPHERE_NO_DISCARD
+			if (dist_sq > 1.) discard;
+		#endif
 
 		P_POSITION float z = sqrt(1. - dist_sq);
 
@@ -49,7 +51,9 @@ return {
 	{
 		P_POSITION float dist_sq = dot(diff, diff);
 
-		if (dist_sq > 1.) discard;
+		#ifndef SPHERE_NO_DISCARD
+			if (dist_sq > 1.) discard;
+		#endif
 
 		P_POSITION float z = sqrt(1. - dist_sq);
 		P_POSITION float phi = atan(z, diff.x);
@@ -61,7 +65,9 @@ return {
 	{
 		P_POSITION float dist_sq = dot(diff, diff);
 
-		if (dist_sq > 1.) discard;
+		#ifndef SPHERE_NO_DISCARD
+			if (dist_sq > 1.) discard;
+		#endif
 
 		P_POSITION float z = sqrt(1. - dist_sq);
 		P_POSITION float phi = atan(z, diff.x);
@@ -76,7 +82,9 @@ return {
 	{
 		P_POSITION float dist_sq = dot(diff, diff);
 
-		if (dist_sq > 1.) discard;
+		#ifndef SPHERE_NO_DISCARD
+			if (dist_sq > 1.) discard;
+		#endif
 
 		P_POSITION float z = sqrt(1. - dist_sq);
 		P_POSITION float phi = atan(z, diff.x);
