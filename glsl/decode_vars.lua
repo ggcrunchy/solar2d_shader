@@ -1,4 +1,4 @@
---- GLSL-side mixins to acquire data sent by @{corona_shader.lua.pack}'s routines.
+--- GLSL-side mixins to acquire data sent by @{corona_shader.lua.encode} routines.
 
 --
 -- Permission is hereby granted, free of charge, to any person obtaining
@@ -27,7 +27,7 @@
 return {
 
 [[
-	vec2 Unpack_UnitPair (float xy)
+	vec2 UnitPair (float xy)
 	{
 		P_UV float axy = abs(xy);
 		P_UV float frac = fract(axy);
@@ -35,7 +35,7 @@ return {
 		return vec2((axy - frac) / 1023., sign(xy) * frac + .5);
 	}
 ]], [[
-	void Unpack_UnitPair4 (vec4 xy, out vec4 x, out vec4 y)
+	void UnitPair4_Out (vec4 xy, out vec4 x, out vec4 y)
 	{
 		P_UV vec4 axy = abs(xy);
 		P_UV vec4 frac = fract(axy);

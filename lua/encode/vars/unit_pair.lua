@@ -29,7 +29,7 @@ local floor = math.floor
 
 -- Modules --
 local effect_props = require("corona_shader.lua.effect_props")
-local pack_utils = require("corona_shader.lua.pack.utils")
+local pack_utils = require("corona_shader.lua.encode.utils")
 
 -- Cached module references --
 local _FromXY_

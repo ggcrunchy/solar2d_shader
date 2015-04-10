@@ -1,4 +1,5 @@
---- A texture-mapped sphere shader with (internally generated) bump mapping.
+--- This module extends vertex and fragment shader loaders to infer and automatically
+-- incorporate dependencies.
 
 --
 -- Permission is hereby granted, free of charge, to any person obtaining
@@ -39,7 +40,7 @@ local _VertexShader_
 -- Exports --
 local M = {}
 
--- --
+-- Build up a list of names to ignore when gathering identifiers --
 local IgnoreThese = {}
 
 for _, v in ipairs{
@@ -60,12 +61,12 @@ for _, v in ipairs{
 	"gl_Position", "gl_PointSize", -- vertex shader outputs
 	"gl_FragCoord", "gl_FrontFacing", "gl_PointCoord", -- fragment shader inputs
 	"gl_FragColor", "glFragData", -- fragment shader outputs
-	"gl_MaxVertexAttribs", "gl_MaxVertexUniformVectors", "gl_MaxVaryingVectors", "gl_MaxVertexTextureImageUnits", -- built-in constants...
-	"gl_MaxCombinedTextureImageUnits", "gl_MaxTextureImageUnits", "gl_MaxFragmentUniformVectors", "gl_MaxDrawBuffers", -- ...continued
+	"gl_MaxVertexAttribs", "gl_MaxVertexUniformVectors", "gl_MaxVaryingVectors", "gl_MaxVertexTextureImageUnits", -- built-in constants
+	"gl_MaxCombinedTextureImageUnits", "gl_MaxTextureImageUnits", "gl_MaxFragmentUniformVectors", "gl_MaxDrawBuffers",
 	"gl_DepthRangeParameters", "gl_DepthRange", -- built-in uniform state
 	"none", "const", "attribute", "uniform", "varying", -- storage qualifiers
 	"in", "out", "inout", -- parameter qualifiers
-	"highp", "mediump", "lowp", -- precision qualifiers
+	"highp", "mediump", "lowp", "precision", -- precision qualifiers
 	"invariant", "STDGL", -- invariant qualifiers
 	"CoronaVertexUserData", -- Corona data-passing
 	"CoronaSampler0", "CoronaSampler1", -- Corona samplers
@@ -76,15 +77,18 @@ for _, v in ipairs{
 	IgnoreThese[v] = true
 end
 
---
+-- TODO: are arrays well-handled?
+-- What about preprocessor stuff? (including extensions and the associated behaviors)
+
+-- Is the name okay to gather?
 local function Accepts (ignore, what)
 	return not (IgnoreThese[what] or (ignore and ignore[what]))
 end
 
--- --
+-- Zero or more spaces --
 local SpacesPatt = "%s*"
 
---
+-- C-style comments replacement
 local function CommentC (before, up_to, comment, after, last)
 	local has_up_to = gsub(up_to, SpacesPatt, "") ~= ""
 	local has_after = gsub(after, SpacesPatt, "") ~= ""
@@ -102,7 +106,7 @@ local function CommentC (before, up_to, comment, after, last)
 	end
 end
 
---
+-- C++-style comments replacement
 local function CommentCPP (before, between, last)
 	if gsub(between, SpacesPatt, "") ~= "" then
 		return before .. between .. last
@@ -111,7 +115,7 @@ local function CommentCPP (before, between, last)
 	end
 end
 
---
+-- Strips comments from source (to avoid spurious identifiers)
 local function EatComments (str)
 	str = gsub(str, "(\n?)([^\n]-)/%*(.-)%*/([^\n]*)(\n?)", CommentC)
 	str = gsub(str, "(\n?)([^\n]-)//[^\n]*(\n?)", CommentCPP)
@@ -119,14 +123,14 @@ local function EatComments (str)
 	return str
 end
 
---
+-- Helper to "iterate" over a single string
 local function OneString (str, done)
 	if not done then
 		return true, str
 	end
 end
 
---
+-- Iterates over the input strings and builds an ignore list, if requested
 local function GetInputAndIgnoreList (name)
 	local input = require("corona_shader.glsl." .. name)
 
@@ -145,43 +149,49 @@ local function GetInputAndIgnoreList (name)
 	end
 end
 
--- --
+-- Registered code segment; identifier-to-code segment ID map; next available segment ID --
 local Code, Names, ID = {}, {}, 1
 
--- --
+-- A legal GLSL function or variable identifier --
 local IdentifierPatt = "[_%a][_%w]*"
 
--- --
+-- Optional dot --
 local DotPatt = "(%.?)"
 
--- --
+-- Assignment to a variable, struct field, or vector components --
 local AssignmentPatt = DotPatt .. SpacesPatt .. "(" .. IdentifierPatt .. ")" .. SpacesPatt .. "="
 
---
+-- ^^^^ TODO: Matrices, arrays okay?
+
+-- Loads one or more constants-defining code segments
 local function LoadConstants (input)
 	local ignore, f, s, v = GetInputAndIgnoreList(input)
 
 	for _, str in f, s, v do
 		str = EatComments(str)
 
+		-- Associate any unignored constants with the code segment, after disambiguating them
+		-- from structure fields or vector components.
 		for dot, name in gmatch(str, AssignmentPatt) do
 			if dot == "" and Accepts(ignore, name) then
 				Names[name] = ID
 			end
 		end
 
-		--
+		-- Register the code.
 		ID, Code[ID] = ID + 1, str
 	end
 end
 
---
+-- Register any constants.
 LoadConstants("constants")
 
--- --
+-- ^^^ TODO: Should be constants OR variables...
+
+-- Names depended on by code segements, i.e. coming from other segments --
 local DependsOn = {}
 
--- --
+-- Braced / parenthesized substrings; optional punctuation character --
 local BracesPatt = "%b{}"
 local ParensPatt = "%b()"
 local PunctPatt = "(%p?)"
@@ -189,21 +199,24 @@ local PunctPatt = "(%p?)"
 -- Dummy capture (shader source is zero-terminated) for pattern consistency --
 local ZeroPatt = "(%z?)"
 
--- --
+-- Function calls, definitions; struct declarations; variable usage --
 local IterCallsPatt = "(" .. IdentifierPatt .. ")" .. SpacesPatt .. ParensPatt .. SpacesPatt .. PunctPatt
 local IterDefsPatt = ZeroPatt .. "(" .. IdentifierPatt .. ")" .. SpacesPatt .. ParensPatt .. SpacesPatt .. BracesPatt
 local IterStructsPatt = ZeroPatt .. "struct%s+(" .. IdentifierPatt .. ")"
 local IterVarsPatt = DotPatt .. SpacesPatt .. "(" .. IdentifierPatt .. ")" .. SpacesPatt .. PunctPatt
 
---
+-- Loads one or more functions-defining code segments
 local function LoadFunctions (input)
 	local ignore, f, s, v = GetInputAndIgnoreList(input)
 
-	--
 	for _, str in f, s, v do
-		local depends_on
-
 		str = EatComments(str)
+
+		-- Find any variables (which must be distinguished from structure fields and vector
+		-- components) and function calls (which must be distinguished from definitions). If
+		-- these are not to be ignored (e.g. local functions or built-ins), add their names
+		-- to the dependencies (n.b. this can harmlessly self-reference the code segment).
+		local depends_on
 
 		for dot, name, token in gmatch(str, IterVarsPatt) do
 			if dot == "" and token ~= "(" and token ~= "{" and Names[name] then
@@ -213,7 +226,6 @@ local function LoadFunctions (input)
 			end
 		end
 
-		--
 		for name, token in gmatch(str, IterCallsPatt) do
 			if token ~= "{" and Accepts(ignore, name) then
 				depends_on = depends_on or {}
@@ -222,59 +234,60 @@ local function LoadFunctions (input)
 			end
 		end
 
-		--
+		-- Associate function and structure definitions to the code segment. For all intents
+		-- and purposes, the latter (i.e. constructors) are interpreted as functions.
 		for _, name in gmatch(str, IterDefsPatt) do
 			if Accepts(ignore, name) then
 				Names[name] = ID
 			end
 		end
 
-		--
 		for _, name in gmatch(str, IterStructsPatt) do
 			if Accepts(ignore, name) then
 				Names[name] = ID
 			end
 		end
 
-		--
+		-- Register the code and its dependencies.
 		ID, Code[ID], DependsOn[ID] = ID + 1, str, depends_on
 	end
 end
 
---
+-- Register helper functions.
 LoadFunctions("bump")
+LoadFunctions("decode_vars")
 LoadFunctions("neighbors")
 LoadFunctions("simplex")
 LoadFunctions("sphere")
 LoadFunctions("texels")
-LoadFunctions("unpack")
 LoadFunctions("worley")
 
--- --
-local List, Marks = {}, {}
+-- Topologically sort the registered code segments.
+do
+	local List, Marks = {}, {}
 
---
-local function Visit (index)
-	if not Marks[index] then
-		Marks[index] = true
+	local function Visit (index)
+		if not Marks[index] then
+			Marks[index] = true
 
-		local deps = DependsOn[index]
+			local deps = DependsOn[index]
 
-		if deps then
-			for name in pairs(deps) do
-				Visit(Names[name])
+			if deps then
+				for name in pairs(deps) do
+					Visit(Names[name])
+				end
 			end
-		end
 
-		List[#List + 1] = index
+			List[#List + 1] = index
+		end
+	end
+
+	for i = 1, ID do
+		Visit(i)
 	end
 end
 
-for i = 1, ID do
-	Visit(i)
-end
-
---
+-- Gather the ID's of a segment and its dependencies
 local function CollectDependencies (collect, id)
 	local deps = DependsOn[id]
 
@@ -291,7 +304,7 @@ local function CollectDependencies (collect, id)
 	collect[#collect + 1] = id
 end
 
---
+-- Gather the dependencies for a variable or function
 local function CollectName (collect, name)
 	local id = Names[name]
 
@@ -304,7 +317,7 @@ local function CollectName (collect, name)
 	return collect
 end
 
---
+-- Gather names to be ignored
 local function BuildIgnoreList (code, patt, ignore)
 	for dot, name in gmatch(code, patt) do
 		if dot == "" and Accepts(ignore, name) then
@@ -317,16 +330,17 @@ local function BuildIgnoreList (code, patt, ignore)
 	return ignore
 end
 
---
+-- Infers depended-on code to prepend
 local function Include (code)
-	--
+	-- Ignore any local assignments and definitions.
 	local ignore
 
 	ignore = BuildIgnoreList(code, AssignmentPatt, ignore)
 	ignore = BuildIgnoreList(code, IterDefsPatt, ignore)
 	ignore = BuildIgnoreList(code, IterStructsPatt, ignore)
 
-	--
+	-- Collect all external dependencies, with any necessary disambiguation (less care is
+	-- needed here since much has already been registered).
 	local collect
 
 	for dot, name in gmatch(code, IterVarsPatt) do
@@ -335,13 +349,14 @@ local function Include (code)
 		end
 	end
 
-	for name, token in gmatch(code, IterCallsPatt) do
-		if token ~= "{" and Accepts(ignore, name) then
+	for name in gmatch(code, IterCallsPatt) do
+		if Accepts(ignore, name) then
 			collect = CollectName(collect, name)
 		end
 	end
 
-	--
+	-- If any dependencies were found, put them into topologically-sorted order, remove any
+	-- duplicates, stitch them together, and return the result.
 	if collect then
 		sort(collect)
 
@@ -361,13 +376,17 @@ local function Include (code)
 	end
 end
 
---
-local function Pretty (str)
-	return gsub(str, "\t", "  ")
+-- Helper to make source reasonably print-friendly
+local function Pretty (str, opts)
+	if opts and opts.pretty then
+		return gsub(str, "\t", "  ")
+	else
+		return str
+	end
 end
 
--- --
-local Prelude = Pretty[[
+-- Common fragment shader prelude --
+local Prelude = [[
 	#ifdef GL_ES
 		#ifdef GL_FRAGMENT_PRECISION_HIGH
 			precision highp float;
@@ -378,18 +397,38 @@ local Prelude = Pretty[[
 
 ]]
 
---- DOCME
+--- Given some fragment shader code, this will attempt to resolve any dependencies on
+-- registered GLSL helpers, in particular various constants, functions, structs, and
+-- variables.
+--
+-- If there are errors in the shader source, e.g. unknown names, this function will still
+-- return its best effort, say to print out for debugging. Since the code will probably be
+-- broken, an error will show up when calling **graphics.defineEffect** down the line.
+-- @string code Shader-specific code.
+-- @ptable[opt] opts Shader options. Fields:
+--
+-- * **pretty**: If true, the code will be somewhat prettied for printing.
+-- * **no_default_precision**: If true, no default precision qualifier is established for
+-- this shader. **N.B.** This will not play well with most of the registered helper code.
+-- @treturn string Resolved shader code.
 function M.FragmentShader (code, opts)
 	code = _VertexShader_(code, opts)
 
-	if not (opts and opts.suppress_precision) then
-		code = Prelude .. code
+	if not (opts and opts.no_default_precision) then
+		code = Pretty(Prelude, opts) .. code
 	end
 
 	return code
 end
 
---- DOCME
+-- TODO: Dock all the registered constants, functions, etc...
+
+--- As per @{FragmentShader}, but for vertex shaders.
+-- @string code Shader-specific code.
+-- @ptable[opt] opts Shader options. Fields:
+--
+-- * **pretty**: If true, the code will be somewhat prettied for printing.
+-- @treturn string Resolved shader code.
 function M.VertexShader (code, opts)
 	code = EatComments(code)
 
@@ -399,11 +438,7 @@ function M.VertexShader (code, opts)
 		code = include .. "\n" .. code
 	end
 
-	if opts and opts.pretty then
-		code = Pretty(code)
-	end
-
-	return code
+	return Pretty(code, opts)
 end
 
 -- Cache module members.
