@@ -60,6 +60,16 @@ for _, v in ipairs{
 	"matrixCompMult", -- matrix
 	"lessThan", "lessThanEqual", "greaterThan", "greaterThanEqual", "equal", "notEqual", "any", "all", "not", -- vector relational
 	"texture2D", "texture2DProj", "textureCube", "texture2DLod", "texture2DProjLod", "textureCubeLod", -- texture lookup
+	"gl_Position", "gl_PointSize", -- vertex shader outputs
+	"gl_FragCoord", "gl_FrontFacing", "gl_PointCoord", -- fragment shader inputs
+	"gl_FragColor", "glFragData", -- fragment shader outputs
+	"gl_MaxVertexAttribs", "gl_MaxVertexUniformVectors", "gl_MaxVaryingVectors", "gl_MaxVertexTextureImageUnits", -- built-in constants...
+	"gl_MaxCombinedTextureImageUnits", "gl_MaxTextureImageUnits", "gl_MaxFragmentUniformVectors", "gl_MaxDrawBuffers", -- ...continued
+	"gl_DepthRangeParameters", "gl_DepthRange", -- built-in uniform state
+	"none", "const", "attribute", "uniform", "varying", -- storage qualifiers
+	"in", "out", "inout", -- parameter qualifiers
+	"highp", "mediump", "lowp", -- precision qualifiers
+	"invariant", "STDGL", -- invariant qualifiers
 	"CoronaVertexUserData", -- Corona data-passing
 	"CoronaSampler0", "CoronaSampler1", -- Corona samplers
 	"CoronaContentScale", "CoronaDeltaTime", "CoronaTotalTime", "CoronaTexCoord", "CoronaTexelSize", -- Corona environment variables
@@ -68,6 +78,10 @@ for _, v in ipairs{
 } do
 	IgnoreThese[v] = true
 end
+
+-- TODO: variable pattern needs some special handling so vector components don't show up, e.g. (%.)?%s* beforehand?
+-- Also structure members...
+-- Are arrays okay?
 
 --
 local function Accepts (ignore, what)
