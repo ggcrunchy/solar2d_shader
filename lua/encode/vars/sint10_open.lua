@@ -1,6 +1,6 @@
---- Lua-side data-packing routines for <+,->[0, 1022] x [0, 1) pairs, where the sign is
+--- Lua-side data-encoding routines for <+,->[0, 1022] x [0, 1) pairs, where the sign is
 -- understood to be a separate piece of information. Note that the integer range is one
--- shorter than in most packing formats.
+-- shorter than in most encodings.
 
 --
 -- Permission is hereby granted, free of charge, to any person obtaining

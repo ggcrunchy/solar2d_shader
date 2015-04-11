@@ -1,4 +1,4 @@
---- Lua-side data-packing routines for [0, 31] x [0, 31] x [0, 1) triples.
+--- Lua-side data-encoding routines for [0, 31] x [0, 31] x [0, 1) triples.
 
 --
 -- Permission is hereby granted, free of charge, to any person obtaining

@@ -1,4 +1,4 @@
---- Utilities for data-packing routines.
+--- Data-encoding utilities.
 
 --
 -- Permission is hereby granted, free of charge, to any person obtaining
@@ -31,19 +31,33 @@ local effect_props = require("corona_shader.lua.effect_props")
 -- Exports --
 local M = {}
 
---- DOCME
-function M.DefinePairPropertyHandler (name, to_xy, from_xy, min_value, max_value, first_key, paired_to_key)
-	first_key = first_key or {}
-	paired_to_key = paired_to_key or {}
+--- Defines a property handler for two numbers encoded as a pair.
+-- @ptable params Handler parameters. Fields:
+--
+-- * **name**: Handler name.
+-- * **decode**: Decoding routine.
+-- * **encode**: Encoding routine.
+-- * **min_value**: Minimum value of number #1...
+-- * **max_value**: ...and maximum.
+-- * **min_value2**: Minimum value of number #2... (If absent, uses **min_value**.)
+-- * **max_value2**: ...and maximum. (If absent, uses **max_value**.)
+-- * **first_key**: Unique handler state key of "first" field. If absent, auto-generated.
+-- * **paired_to_key**: Unique handler state key of "paired to" field. If absent, auto-generated.
+function M.DefinePairPropertyHandler (params)
+	local decode, encode = params.decode, params.encode
+	local min1, max1 = params.min_value, params.max_value
+	local min2, max2 = params.min_value2 or min1, params.max_value2 or max1
+	local first_key = params.first_key or {}
+	local paired_to_key = params.paired_to_key or {}
 
-	effect_props.DefinePropertyHandler(name,
+	effect_props.DefinePropertyHandler(params.name,
 
 		-- Getter --
 		function(t, k, _, hstate)
 			local combo, k2 = hstate[first_key][k], hstate[paired_to_key][k]
 
 			if k2 then
-				local u1, u2 = to_xy(t[combo or hstate[first_key][k2]])
+				local u1, u2 = decode(t[combo or hstate[first_key][k2]])
 
 				return combo and u1 or u2
 			end
@@ -56,7 +70,8 @@ function M.DefinePairPropertyHandler (name, to_xy, from_xy, min_value, max_value
 			if k2 then
 				state[k] = v
 
-				--
+				-- Figure out the names of the second number and the "combined" kernel
+				-- parameter. Put the two numbers in order.
 				local combo, v2 = hstate[first_key][k]
 
 				if combo then
@@ -65,14 +80,15 @@ function M.DefinePairPropertyHandler (name, to_xy, from_xy, min_value, max_value
 					combo, v, v2 = hstate[first_key][k2], state[k2], v
 				end
 
-				--
+				-- If one of the two numbers has yet to be evaluated, decode the default
+				-- parameter value. Encode and assign the updated pair.
 				if not (v and v2) then
-					local u1, u2 = to_xy(t[combo])
+					local u1, u2 = decode(t[combo])
 
 					v, v2 = v or u1, v2 or u2
 				end
 
-				t[combo] = from_xy(v, v2)
+				t[combo] = encode(v, v2)
 
 				return true
 			end
@@ -85,7 +101,13 @@ function M.DefinePairPropertyHandler (name, to_xy, from_xy, min_value, max_value
 
 		-- Has Property --
 		function(hstate, prop)
-			return hstate[paired_to_key][prop], min_value, max_value
+			local has_prop = hstate[paired_to_key][prop]
+
+			if hstate[first_key][prop] then
+				return has_prop, min1, max1
+			else
+				return has_prop, min2, max2
+			end
 		end,
 
 		-- Keys --

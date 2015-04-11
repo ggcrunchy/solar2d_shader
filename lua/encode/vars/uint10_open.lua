@@ -1,4 +1,4 @@
---- Lua-side data-packing routines for [0, 1023] x [0, 1) pairs.
+--- Lua-side data-encoding routines for [0, 1023] x [0, 1) pairs.
 
 --
 -- Permission is hereby granted, free of charge, to any person obtaining

@@ -1,4 +1,4 @@
---- Lua-side data-packing routines for [0, 1023] x [0, 1) pairs, where the integer
+--- Lua-side data-encoding routines for [0, 1023] x [0, 1) pairs, where the integer
 -- part describes a quantized lattice of dimension 2^m x 2^n, s.t. m + n = 10.
 
 --

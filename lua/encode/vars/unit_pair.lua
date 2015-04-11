@@ -1,4 +1,4 @@
---- Lua-side data-packing routines for [0, 1] x [0, 1] pairs.
+--- Lua-side data-encoding routines for [0, 1] x [0, 1] pairs.
 
 --
 -- Permission is hereby granted, free of charge, to any person obtaining
@@ -29,7 +29,7 @@ local floor = math.floor
 
 -- Modules --
 local effect_props = require("corona_shader.lua.effect_props")
-local pack_utils = require("corona_shader.lua.encode.utils")
+local encoding_utils = require("corona_shader.lua.encode.utils")
 
 -- Cached module references --
 local _FromXY_
@@ -38,22 +38,34 @@ local _VertexDatum_
 -- Exports --
 local M = {}
 
---- DOCME
-function M.AddVertexProperty (kernel, index, prop1, prop2, combo, a, b)
-	effect_props.AddVertexProperty(kernel, "unit_pair", _VertexDatum_(combo, index, a, b), prop1, prop2, combo)
+--- Adds a unit pair-style parameter to a kernel.
+--
+-- Some property data is also added for the parameter, cf. @{corona_shader.lua.effect_props.AddVertexProperty}.
+-- @ptable kernel Corona shader kernel.
+-- @uint index Vertex userdata component index, cf. @{VertexDatum}.
+-- @string prop1 Friendly name of number #1...
+-- @string prop2 ...and #2.
+-- @string combo Friendly name of shader parameter, cf. @{VertexDatum}.
+-- @number defx As per @{VertexDatum}.
+-- @number defy As per @{VertexDatum}.
+function M.AddVertexProperty (kernel, index, prop1, prop2, combo, defx, defy)
+	effect_props.AddVertexProperty(kernel, "unit_pair", _VertexDatum_(combo, index, defx, defy), prop1, prop2, combo)
 end
 
---- DOCME
--- @number x A value &isin; [0, 1]...
--- @number y ...and another one.
--- @treturn number The packed value.
+--- Encodes two numbers &isin; [0, 1] into a **mediump**-range float for retrieval in GLSL.
+-- @number x Number #1...
+-- @number y ...and #2.
+-- @treturn number Encoded pair.
 function M.FromXY (x, y)
 	y = y - .5
 
 	return (y < 0 and -1 or 1) * (floor(1023 * x) + abs(y))
 end
 
---- DOCME
+--- Decodes a **mediump**-range float, assumed to be encoded as per @{FromXY}.
+-- @number pair Encoded pair.
+-- @treturn number Number #1...
+-- @treturn number ...and #2.
 function M.ToXY (pair)
 	local apair = abs(pair)
 	local xpart = floor(apair)
@@ -61,7 +73,14 @@ function M.ToXY (pair)
 	return xpart / 1023, (pair < 0 and -1 or 1) * (apair - xpart) + .5
 end
 
---- DOCME
+--- Prepares a unit pair-style parameter for addition to a kernel.
+--
+-- This parameter should be assigned values encoded as per @{FromXY}.
+-- @string name Friendly name of shader parameter.
+-- @uint index Vertex userdata component index.
+-- @number defx Default number #1, cf. @{FromXY}...
+-- @number defy ...and number #2.
+-- @treturn table Vertex userdata component.
 function M.VertexDatum (name, index, defx, defy)
 	return {
 		name = name,
@@ -71,8 +90,12 @@ function M.VertexDatum (name, index, defx, defy)
 	}
 end
 
---
-pack_utils.DefinePairPropertyHandler("unit_pair", M.ToXY, M.FromXY, 0, 1)
+-- Register the "unit_pair" property handler.
+encoding_utils.DefinePairPropertyHandler{
+	name = "unit_pair",
+	decode = M.ToXY, encode = M.FromXY,
+	min_value = 0, max_value = 1
+}
 
 -- Cache module members.
 _FromXY_ = M.FromXY

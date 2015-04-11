@@ -34,7 +34,7 @@ local pairs = pairs
 -- Exports --
 local M = {}
 
--- --
+-- Kernel -> property data map --
 local PropertyData = setmetatable({}, { __mode = "k" })
 
 --
@@ -49,8 +49,15 @@ local Keys = {}
 local Handlers = {}
 
 --- DOCME
+-- @ptable kernel Corona shader kernel.
+-- @param handler_name Name of property handler, as previously used in @{DefinePropertyHandler}.
+-- @string vprop
+-- @param ...
+-- Some property data is also added to the kernel pertaining to this parameter. Once the
+-- kernel's effect is assigned to an object, the effect itself may be a
 function M.AddVertexProperty (kernel, handler_name, vprop, ...)
 	assert(not kernel.graph, "Cannot add vertex property to multi-pass kernel")
+	-- TODO: Uniform data?
 
 	local pdata, vdata = GetPropertyData(kernel), kernel.vertexData or {}
 	local props = pdata.properties or {
@@ -104,7 +111,7 @@ function M.AddVertexProperty (kernel, handler_name, vprop, ...)
 	PropertyData[kernel], kernel.vertexData = pdata, vdata
 end
 
--- --
+-- Full name -> property accessors map --
 local Augmented = setmetatable({}, { __mode = "v" })
 
 --
@@ -141,10 +148,12 @@ local function GetAccessors (effect, kernel)
 	return Augmented[name]
 end
 
--- --
+-- Fill effect -> proxy map --
 local Proxy = setmetatable({}, { __mode = "k" })
 
 --- DOCME
+-- @pobject object
+-- @ptable kernel
 function M.AugmentEffect (object, kernel)
 	local effect, graph = object.fill.effect, kernel.graph
 
@@ -166,7 +175,15 @@ function M.AugmentEffect (object, kernel)
 end
 
 --- DOCME
+-- @param name
+-- @callable get
+-- @callable set
+-- @callable init
+-- @callable has_prop
+-- @ptable[opt] keys
 function M.DefinePropertyHandler (name, get, set, init, has_prop, keys)
+	assert(not Handlers[name], "Property handler name already in use")
+
 	--
 	for i = 1, #(keys or ""), 2 do
 		assert(not Keys[keys[i]], "Key already in use")
@@ -186,6 +203,12 @@ function M.DefinePropertyHandler (name, get, set, init, has_prop, keys)
 end
 
 --- DOCME
+-- @ptable kernel
+-- @string[opt] prefix
+-- @string prop
+-- @treturn boolean X
+-- @treturn ?number Y
+-- @treturn ?number Z
 function M.FoundInProperties (kernel, prefix, prop)
 	--
 	if prefix then
@@ -222,6 +245,10 @@ local function GetEffect (object, prefix)
 end
 
 --- DOCME
+-- @pobject object
+-- @string[opt] prefix
+-- @string prop
+-- @return V
 function M.GetEffectProperty (object, prefix, prop)
 	local effect = GetEffect(object, prefix)
 	local proxy = Proxy[effect]
@@ -234,6 +261,10 @@ function M.GetEffectProperty (object, prefix, prop)
 end
 
 --- DOCME
+-- @pobject object
+-- @string[opt] prefix
+-- @string prop
+-- @param v
 function M.SetEffectProperty (object, prefix, prop, v)
 	local effect = GetEffect(object, prefix)
 	local proxy = Proxy[effect]
