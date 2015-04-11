@@ -31,12 +31,16 @@ local gsub = string.gsub
 local ipairs = ipairs
 local loaded = package.loaded
 local pairs = pairs
+local pcall = pcall
 local require = require
 local sort = table.sort
 local type = type
+local wrap = coroutine.wrap
+local yield = coroutine.yield
 
 -- Modules --
 local strings = require("tektite_core.var.strings")
+local table_funcs = require("tektite_core.table.funcs")
 
 -- Cached module references --
 local _VertexShader_
@@ -257,31 +261,74 @@ local function LoadFunctions (input)
 end
 
 -- Visits a node during topological search
-local function Visit (list, marks, index)
-	if not marks[index] then
-		marks[index] = true
+local function Visit (list, marks, index, from, same)
+	local mark = marks[index]
+
+	-- Not yet visited: proceed.
+	if mark == nil then
+		marks[index] = false
 
 		local deps = DependsOn[index]
 
 		if deps then
 			for name in pairs(deps) do
-				Visit(list, marks, Names[name])
+				local dep_id = Names[name]
+
+				if dep_id ~= index then
+					Visit(list, marks, Names[name], name)
+				end
 			end
 		end
 
-		list[#list + 1] = index
+		list[#list + 1], marks[index] = index, true
+
+	-- Being visited: cycle.
+	elseif mark == false then
+		yield(from)
 	end
 end
 
---- DOCME
+--- Loads code segments for later use by @{FragmentShader} and @{VertexShader}.
+--
+-- The various code components (constants, functions, structs, variables) are gathered and
+-- the associated code segments are ordered topologically, to ensure well-formed shaders.
+--
+-- Each module being submitted is expected to return either a string or a table.
+--
+-- As a string, this is a single code segment.
+--
+-- As a table, the array part will consist of strings, each being a code segment. An array
+-- of strings may also be found under the **ignore** key; any identifiers listed here are
+-- ignored when examining the code segments, e.g. local functions or intermediate constants.
+--
+-- Already-loaded modules are ignored.
 -- single string, array of strings, ignores
 -- @ptable params Load parameters. Fields:
 --
--- * **from**:
--- * **prefix**:
--- * **constants**:
--- * **functions**:
+-- * **from**: If present, the name of the module calling **Load**, whose directory will be
+-- used as per **prefix**.
+-- * **prefix**: If present (and **from** is absent), prefixed to the name of each module to
+-- be loaded.
+-- * **constants**: If present, an array of names of constants-defining modules.
+--
+-- Assignments, e.g. `vec2 var = vec2(1.0, 3.5)`, found within the modules' code segments,
+-- are examined. Any variables, such as _var_ in this case, if not found in the ignore list,
+-- are added to the loader's internal state.
+-- * **functions**: If present, an array of names of functions- and struct-defining modules.
+--
+-- Definitions for functions, e.g. `void action (inout vec2 v) { ... }` and structs, e.g.
+-- `struct data { ... }`, are examined. Any identifiers, such as _action_ and _data_ in these
+-- cases, if not found in the ignore list, are added to the loader's internal state.
+-- @treturn boolean Loading succeeded?
+-- @treturn ?string If loading failed, an error message.
 function M.Load (params)
+	-- Make a snapshot of the state, in case loading goes awry.
+	local id, code, depends_on, names = ID, Code, DependsOn, Names
+
+	Code = table_funcs.Copy(Code)
+	DependsOn = table_funcs.Copy(DependsOn)
+	Names = table_funcs.Copy(Names)
+
 	-- Prepare any prefix for module names.
 	local prefix = ""
 
@@ -304,14 +351,21 @@ function M.Load (params)
 		LoadFunctions(prefix .. params.functions[i])
 	end
 
-	-- TODO: Detect conflicts (before committing anything to be sorted!)
-
-	-- Topologically sort the registered code segments.
+	-- Topologically sort the registered code segments. If a cycle was introduced, revert any
+	-- changes and report the (first) troublesome identifier.
 	local list, marks = {}, {}
 
 	for i = 1, ID do
-		Visit(list, marks, i)
+		local name = wrap(Visit)(list, marks, i)
+
+		if name then
+			ID, Code, DependsOn, Names = id, code, depends_on, names
+
+			return false, "Cycle found with identifier: " .. name
+		end
 	end
+
+	return true
 end
 
 -- Gather the ID's of a segment and its dependencies
