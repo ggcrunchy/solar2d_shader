@@ -29,10 +29,14 @@ local concat = table.concat
 local gmatch = string.gmatch
 local gsub = string.gsub
 local ipairs = ipairs
+local loaded = package.loaded
 local pairs = pairs
 local require = require
 local sort = table.sort
 local type = type
+
+-- Modules --
+local strings = require("tektite_core.var.strings")
 
 -- Cached module references --
 local _VertexShader_
@@ -132,20 +136,24 @@ end
 
 -- Iterates over the input strings and builds an ignore list, if requested
 local function GetInputAndIgnoreList (name)
-	local input = require("corona_shader.glsl." .. name)
-
-	if type(input) == "table" then
-		local ignore
-
-		for i = 1, #(input.ignore or "") do
-			ignore = ignore or {}
-
-			ignore[input.ignore[i]] = true
-		end
-
-		return ignore, ipairs(input)
+	if loaded[name] then
+		return nil, OneString, nil, true -- dummy iteration (already done)
 	else
-		return nil, OneString, input
+		local input = require(name)
+
+		if type(input) == "table" then
+			local ignore
+
+			for i = 1, #(input.ignore or "") do
+				ignore = ignore or {}
+
+				ignore[input.ignore[i]] = true
+			end
+
+			return ignore, ipairs(input)
+		else
+			return nil, OneString, input
+		end
 	end
 end
 
@@ -182,11 +190,6 @@ local function LoadConstants (input)
 		ID, Code[ID] = ID + 1, str
 	end
 end
-
--- Register any constants.
-LoadConstants("constants")
-
--- ^^^ TODO: Should be constants OR variables...
 
 -- Names depended on by code segements, i.e. coming from other segments --
 local DependsOn = {}
@@ -253,37 +256,61 @@ local function LoadFunctions (input)
 	end
 end
 
--- Register helper functions.
-LoadFunctions("bump")
-LoadFunctions("decode_vars")
-LoadFunctions("neighbors")
-LoadFunctions("simplex")
-LoadFunctions("sphere")
-LoadFunctions("texels")
-LoadFunctions("worley")
+-- Visits a node during topological search
+local function Visit (list, marks, index)
+	if not marks[index] then
+		marks[index] = true
 
--- Topologically sort the registered code segments.
-do
-	local List, Marks = {}, {}
+		local deps = DependsOn[index]
 
-	local function Visit (index)
-		if not Marks[index] then
-			Marks[index] = true
-
-			local deps = DependsOn[index]
-
-			if deps then
-				for name in pairs(deps) do
-					Visit(Names[name])
-				end
+		if deps then
+			for name in pairs(deps) do
+				Visit(list, marks, Names[name])
 			end
-
-			List[#List + 1] = index
 		end
+
+		list[#list + 1] = index
+	end
+end
+
+--- DOCME
+-- single string, array of strings, ignores
+-- @ptable params Load parameters. Fields:
+--
+-- * **from**:
+-- * **prefix**:
+-- * **constants**:
+-- * **functions**:
+function M.Load (params)
+	-- Prepare any prefix for module names.
+	local prefix = ""
+
+	if params.from then
+		prefix = strings.RemoveLastSubstring(params.from, "%.")
+	elseif params.prefix then
+		prefix = params.prefix
 	end
 
+	if #prefix > 0 then
+		prefix = prefix .. "."
+	end
+
+	-- Register any new constants or functions.
+	for i = 1, #(params.constants or "") do
+		LoadConstants(prefix .. params.constants[i])
+	end
+
+	for i = 1, #(params.functions or "") do
+		LoadFunctions(prefix .. params.functions[i])
+	end
+
+	-- TODO: Detect conflicts (before committing anything to be sorted!)
+
+	-- Topologically sort the registered code segments.
+	local list, marks = {}, {}
+
 	for i = 1, ID do
-		Visit(i)
+		Visit(list, marks, i)
 	end
 end
 
@@ -420,8 +447,6 @@ function M.FragmentShader (code, opts)
 
 	return code
 end
-
--- TODO: Dock all the registered constants, functions, etc...
 
 --- As per @{FragmentShader}, but for vertex shaders.
 -- @string code Shader-specific code.

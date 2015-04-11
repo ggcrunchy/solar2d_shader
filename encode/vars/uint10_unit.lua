@@ -1,5 +1,4 @@
---- Lua-side data-encoding routines for [0, 1023] x [0, 1] pairs, where the integer
--- part describes a quantized lattice of dimension 2^m x 2^n, s.t. m + n = 10.
+--- Data-encoding routines for [0, 1023] x [0, 1] pairs.
 
 --
 -- Permission is hereby granted, free of charge, to any person obtaining
@@ -24,6 +23,4 @@
 -- [ MIT license: http://www.opensource.org/licenses/mit-license.php ]
 --
 
--- For lattice, choose resoltions (standard will be 32x32) and corresponding functions,
--- for Lua and GLSL; fraction will be as per unit_pair
--- Rest is like normal grid addressing
+-- Integer easy, fraction as per unit_pair

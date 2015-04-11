@@ -1,4 +1,5 @@
---- Lua-side number routines.
+--- Data-encoding routines for [0, 1023] x [0, 1) pairs, where the integer part describes a
+-- quantized lattice of dimension 2^m x 2^n, s.t. m + n = 10.
 
 --
 -- Permission is hereby granted, free of charge, to any person obtaining
@@ -23,22 +24,4 @@
 -- [ MIT license: http://www.opensource.org/licenses/mit-license.php ]
 --
 
--- Exports --
-local M = {}
-
---- DOCME
-function M.XY_Barycenter4 (x, y)
-	-- Compute barycentric coordinates of each corner using Q4 Serendipity quadrilaterals
-	-- with corners (-1, +1), (+1, +1), (-1, -1), (+1, -1).
-	x, y = 2 * x - 1, 2 * y - 1
-
-	local a = .25 * (1 - x) * (1 + y)
-	local b = .25 * (1 + x) * (1 + y)
-	local c = .25 * (1 - x) * (1 - y)
-	local d = .25 * (1 + x) * (1 - y)
-
-	return a, b, c, d
-end
-
--- Export the module.
-return M
+-- As per unit version, but just add fraction

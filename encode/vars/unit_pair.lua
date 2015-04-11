@@ -1,4 +1,4 @@
---- Lua-side data-encoding routines for [0, 1] x [0, 1] pairs.
+--- Data-encoding routines for [0, 1] x [0, 1] pairs.
 
 --
 -- Permission is hereby granted, free of charge, to any person obtaining
@@ -28,8 +28,8 @@ local abs = math.abs
 local floor = math.floor
 
 -- Modules --
-local effect_props = require("corona_shader.lua.effect_props")
-local encoding_utils = require("corona_shader.lua.encode.utils")
+local effect_props = require("corona_shader.effect_props")
+local encoding_utils = require("corona_shader.encode.utils")
 
 -- Cached module references --
 local _FromXY_
@@ -40,7 +40,7 @@ local M = {}
 
 --- Adds a unit pair-style parameter to a kernel.
 --
--- Some property data is also added for the parameter, cf. @{corona_shader.lua.effect_props.AddVertexProperty}.
+-- Some property data is also added for the parameter, cf. @{corona_shader.effect_props.AddVertexProperty}.
 -- @ptable kernel Corona shader kernel.
 -- @uint index Vertex userdata component index, cf. @{VertexDatum}.
 -- @string prop1 Friendly name of number #1...

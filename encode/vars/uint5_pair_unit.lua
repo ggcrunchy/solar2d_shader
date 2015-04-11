@@ -1,4 +1,4 @@
---- Lua-side data-encoding routines for [0, 31] x [0, 31] x [0, 1) triples.
+--- Data-encoding routines for [0, 31] x [0, 31] x [0, 1] triples.
 
 --
 -- Permission is hereby granted, free of charge, to any person obtaining
@@ -23,4 +23,4 @@
 -- [ MIT license: http://www.opensource.org/licenses/mit-license.php ]
 --
 
--- As per unit version, but without needing negative adjustment
+-- See unit5_quad, unit_pair, etc.

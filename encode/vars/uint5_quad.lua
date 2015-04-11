@@ -1,6 +1,4 @@
---- Lua-side data-encoding routines for <+,->[0, 1022] x [0, 1) pairs, where the sign is
--- understood to be a separate piece of information. Note that the integer range is one
--- shorter than in most encodings.
+--- Data-packing routines for [0, 31] x [0, 31] x [0, 31] x [0, 31] quads.
 
 --
 -- Permission is hereby granted, free of charge, to any person obtaining
@@ -25,5 +23,14 @@
 -- [ MIT license: http://www.opensource.org/licenses/mit-license.php ]
 --
 
--- Much like uint10_open, just adding the sign afterward (if used)
--- In GLSL, just extract the sign first
+-- To GLSL form:
+-- Combine 5-bit numbers into 10-bit numbers: 32 * num1 + num2
+-- Turn second one into fraction: num / 1024
+-- Negative-adjust that second one
+-- Combine!
+
+-- From GLSL form:
+-- Recover float
+-- Separate integer and fraction
+-- Integer -> mod 32, (rest - modded) / 32
+-- Fraction -> mult by 1024, do the same (more or less)

@@ -1,4 +1,6 @@
---- GLSL-side mixins to acquire data sent by @{corona_shader.lua.encode} routines.
+--- Data-encoding routines for <+,->[0, 1022] x [0, 1) pairs, where the sign is understood to
+-- be a separate piece of information. Note that the integer range is one fewer than in most
+-- encodings.
 
 --
 -- Permission is hereby granted, free of charge, to any person obtaining
@@ -23,26 +25,5 @@
 -- [ MIT license: http://www.opensource.org/licenses/mit-license.php ]
 --
 
--- Export the functions.
-return {
-
-[[
-	vec2 UnitPair (float xy)
-	{
-		P_UV float axy = abs(xy);
-		P_UV float frac = fract(axy);
-
-		return vec2((axy - frac) / 1023., sign(xy) * frac + .5);
-	}
-]], [[
-	void UnitPair4_Out (vec4 xy, out vec4 x, out vec4 y)
-	{
-		P_UV vec4 axy = abs(xy);
-		P_UV vec4 frac = fract(axy);
-
-		x = (axy - frac) / 1023.;
-		y = sign(xy) * frac + .5;
-	}
-]]
-
-}
+-- Much like uint10_open, just adding the sign afterward (if used)
+-- In GLSL, just extract the sign first

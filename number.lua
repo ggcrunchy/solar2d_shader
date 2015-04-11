@@ -1,4 +1,4 @@
---- Various useful constants.
+--- Number utilities for shaders.
 
 --
 -- Permission is hereby granted, free of charge, to any person obtaining
@@ -23,12 +23,22 @@
 -- [ MIT license: http://www.opensource.org/licenses/mit-license.php ]
 --
 
--- Export the constants.
-return [[
-	float PI = 4. * atan(1.);
-	float TWO_PI = 2. * PI;
-	float PI_OVER_TWO = PI / 2.;
+-- Exports --
+local M = {}
 
-	float ONE_OVER_PI = 1. / PI;
-	float ONE_OVER_TWO_PI = .5 / PI;
-]]
+--- DOCME
+function M.XY_Barycenter4 (x, y)
+	-- Compute barycentric coordinates of each corner using Q4 Serendipity quadrilaterals
+	-- with corners (-1, +1), (+1, +1), (-1, -1), (+1, -1).
+	x, y = 2 * x - 1, 2 * y - 1
+
+	local a = .25 * (1 - x) * (1 + y)
+	local b = .25 * (1 + x) * (1 + y)
+	local c = .25 * (1 - x) * (1 - y)
+	local d = .25 * (1 + x) * (1 - y)
+
+	return a, b, c, d
+end
+
+-- Export the module.
+return M

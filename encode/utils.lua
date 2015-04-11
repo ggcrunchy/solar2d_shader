@@ -26,7 +26,7 @@
 -- Standard library imports --
 
 -- Modules --
-local effect_props = require("corona_shader.lua.effect_props")
+local effect_props = require("corona_shader.effect_props")
 
 -- Exports --
 local M = {}
