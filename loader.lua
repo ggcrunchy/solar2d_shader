@@ -26,12 +26,13 @@
 
 -- Standard library imports --
 local concat = table.concat
+local find = string.find
 local gmatch = string.gmatch
 local gsub = string.gsub
 local ipairs = ipairs
 local loaded = package.loaded
+local match = string.match
 local pairs = pairs
-local pcall = pcall
 local require = require
 local sort = table.sort
 local type = type
@@ -48,17 +49,12 @@ local _VertexShader_
 -- Exports --
 local M = {}
 
--- Build up a list of names to ignore when gathering identifiers --
+-- Build up a list of names to ignore when gathering identifiers.
 local IgnoreThese = {}
 
 for _, v in ipairs{
-	"for", "if", "return", "while", -- keywords
+	"break", "continue", "discard", "do", "else", "for", "if", "return", "while", -- keywords
 	"__FILE__", "__LINE__", "__VERSION__", "GL_ES", "GL_FRAGMENT_PRECISION_HIGH", -- predefined macros
-	"bool", "int", "float", -- singleton constructors
-	"bvec2", "bvec3", "bvec4", -- vector / matrix constructors
-	"ivec2", "ivec3", "ivec4",
-	"mat2", "mat3", "mat4",
-	"vec2", "vec3", "vec4",
 	"radians", "degrees", "sin", "cos", "tan", "atan", "asin", "acos", -- angle / trig
 	"pow", "exp", "log", "exp2", "log2", "sqrt", "inversesqrt", -- exponential
 	"abs", "sign", "floor", "ceil", "fract", "mod", "min", "max", "clamp", "mix", "step", "smoothstep", -- common
@@ -76,6 +72,7 @@ for _, v in ipairs{
 	"in", "out", "inout", -- parameter qualifiers
 	"highp", "mediump", "lowp", "precision", -- precision qualifiers
 	"invariant", "STDGL", -- invariant qualifiers
+	"P_COLOR", "P_DEFAULT", "P_POSITION", "P_RANDOM", "P_UV", -- Corona qualifiers
 	"CoronaVertexUserData", -- Corona data-passing
 	"CoronaSampler0", "CoronaSampler1", -- Corona samplers
 	"CoronaContentScale", "CoronaDeltaTime", "CoronaTotalTime", "CoronaTexCoord", "CoronaTexelSize", -- Corona environment variables
@@ -85,12 +82,28 @@ for _, v in ipairs{
 	IgnoreThese[v] = true
 end
 
+-- Build up a list of built-in types. Add these to the ignore list as well.
+local Types = {}
+
+for _, v in ipairs{
+	"bool", "int", "float", -- singleton constructors
+	"bvec2", "bvec3", "bvec4", -- vector / matrix constructors
+	"ivec2", "ivec3", "ivec4",
+	"mat2", "mat3", "mat4",
+	"vec2", "vec3", "vec4"
+} do
+	IgnoreThese[v], Types[v] = true, true
+end
+
 -- TODO: are arrays well-handled?
 -- What about preprocessor stuff? (including extensions and the associated behaviors)
 
+-- Identifier -> code segment ID map; next available segment ID --
+local Names, ID = {}, 1
+
 -- Is the name okay to gather?
 local function Accepts (ignore, what)
-	return not (IgnoreThese[what] or (ignore and ignore[what]))
+	return Names[what] ~= ID and not (IgnoreThese[what] or (ignore and ignore[what]))
 end
 
 -- Zero or more spaces --
@@ -161,8 +174,8 @@ local function GetInputAndIgnoreList (name)
 	end
 end
 
--- Registered code segment; identifier-to-code segment ID map; next available segment ID --
-local Code, Names, ID = {}, {}, 1
+-- Registered code segment --
+local Code = {}
 
 -- A legal GLSL function or variable identifier --
 local IdentifierPatt = "[_%a][_%w]*"
@@ -175,83 +188,131 @@ local AssignmentPatt = DotPatt .. SpacesPatt .. "(" .. IdentifierPatt .. ")" .. 
 
 -- ^^^^ TODO: Matrices, arrays okay?
 
--- Loads one or more constants-defining code segments
-local function LoadConstants (input)
-	local ignore, f, s, v = GetInputAndIgnoreList(input)
-
-	for _, str in f, s, v do
-		str = EatComments(str)
-
-		-- Associate any unignored constants with the code segment, after disambiguating them
-		-- from structure fields or vector components.
-		for dot, name in gmatch(str, AssignmentPatt) do
-			if dot == "" and Accepts(ignore, name) then
-				Names[name] = ID
-			end
-		end
-
-		-- Register the code.
-		ID, Code[ID] = ID + 1, str
-	end
-end
-
 -- Names depended on by code segements, i.e. coming from other segments --
 local DependsOn = {}
 
--- Braced / parenthesized substrings; optional punctuation character --
+-- Braced / parenthesized substrings --
 local BracesPatt = "%b{}"
 local ParensPatt = "%b()"
-local PunctPatt = "(%p?)"
 
 -- Dummy capture (shader source is zero-terminated) for pattern consistency --
 local ZeroPatt = "(%z?)"
 
 -- Function calls, definitions; struct declarations; variable usage --
-local IterCallsPatt = "(" .. IdentifierPatt .. ")" .. SpacesPatt .. ParensPatt .. SpacesPatt .. PunctPatt
+local IterCallsPatt = ZeroPatt .. "(" .. IdentifierPatt .. ")" .. SpacesPatt .. ParensPatt .. SpacesPatt .. "({?)"
 local IterDefsPatt = ZeroPatt .. "(" .. IdentifierPatt .. ")" .. SpacesPatt .. ParensPatt .. SpacesPatt .. BracesPatt
 local IterStructsPatt = ZeroPatt .. "struct%s+(" .. IdentifierPatt .. ")"
-local IterVarsPatt = DotPatt .. SpacesPatt .. "(" .. IdentifierPatt .. ")" .. SpacesPatt .. PunctPatt
+local IterVarsPatt = DotPatt .. SpacesPatt .. "(" .. IdentifierPatt .. ")" .. SpacesPatt .. "([%({]?)"
 
--- Loads one or more functions-defining code segments
-local function LoadFunctions (input)
+-- --
+local LinePatt = "[;}]?[^;]*;"
+local DeclarePatt = "(" .. IdentifierPatt .. ")%s+(" .. IdentifierPatt .. ")" .. SpacesPatt .. "[=,;]"
+local VarPatt = "(" .. IdentifierPatt .. ")" .. SpacesPatt .. "[=,;]"
+local ParamsPatt = "(" .. IdentifierPatt .. ")" .. SpacesPatt .. "[,%)]"
+
+-- Add names, unless ignored
+local function AddNames (code, patt, ignore)
+	for dot, name in gmatch(code, patt) do
+		if dot == "" and Accepts(ignore, name) then
+			Names[name] = ID
+		end
+	end
+end
+
+-- Gather depended-on names
+local function BuildDependsOnList (code, patt, ignore, local_ignore, depends_on)
+	for dot, name, token in gmatch(code, patt) do
+		if dot == "" and token == "" and Accepts(ignore, name) and Accepts(local_ignore, name) then
+			depends_on = depends_on or {}
+
+			depends_on[name] = true
+		end
+	end
+
+	return depends_on
+end
+
+-- --
+local PreprocessorPatt = "#(" .. IdentifierPatt .. ")([^\n]*)"
+
+--
+local function IgnorePreprocessor (str, ignore)
+	for dir, rest in gmatch(str, PreprocessorPatt) do
+		ignore = ignore or {}
+
+		if dir == "define" or dir == "ifdef" or dir == "ifndef" then
+			for name in gmatch(rest, IdentifierPatt) do
+				ignore[name] = true
+			end
+		end
+
+		ignore[dir] = true
+	end
+
+	return ignore
+end
+
+-- --
+local SignaturePatt = "(" .. IdentifierPatt .. ")" .. SpacesPatt .. "(" .. ParensPatt .. ")" .. SpacesPatt .. "(" .. BracesPatt .. ")"
+
+-- Loads one or more code segments
+local function LoadSegments (input)
 	local ignore, f, s, v = GetInputAndIgnoreList(input)
 
 	for _, str in f, s, v do
 		str = EatComments(str)
 
-		-- Find any variables (which must be distinguished from structure fields and vector
-		-- components) and function calls (which must be distinguished from definitions). If
-		-- these are not to be ignored (e.g. local functions or built-ins), add their names
-		-- to the dependencies (n.b. this can harmlessly self-reference the code segment).
+		-- Associate assignments to variables, as well as function and structure definitions,
+		-- to the code segment. For all intents and purposes, the latter (i.e. constructors)
+		-- are interpreted as functions. The contents of functions and structs are excised in
+		-- order to reduce all the irrelevant assignments inside function bodies.
+		local outer = gsub(str, BracesPatt, "{}")
+
+		AddNames(outer, AssignmentPatt, ignore)
+		AddNames(outer, IterDefsPatt, ignore)
+		AddNames(outer, IterStructsPatt, ignore)
+
+		--
 		local depends_on
 
-		for dot, name, token in gmatch(str, IterVarsPatt) do
-			if dot == "" and token ~= "(" and token ~= "{" and Names[name] then
-				depends_on = depends_on or {}
+		for func, params, body in gmatch(str, SignaturePatt) do
+			if not (ignore and ignore[func]) then
+				--
+				local local_ignore = {}
 
-				depends_on[name] = true
-			end
-		end
+				for param in gmatch(params, ParamsPatt) do
+					local_ignore[param] = true
+				end
 
-		for name, token in gmatch(str, IterCallsPatt) do
-			if token ~= "{" and Accepts(ignore, name) then
-				depends_on = depends_on or {}
+				IgnorePreprocessor(outer, local_ignore)
+				IgnorePreprocessor(body, local_ignore)
 
-				depends_on[name] = true
-			end
-		end
+				--
+				local stripped = body
 
-		-- Associate function and structure definitions to the code segment. For all intents
-		-- and purposes, the latter (i.e. constructors) are interpreted as functions.
-		for _, name in gmatch(str, IterDefsPatt) do
-			if Accepts(ignore, name) then
-				Names[name] = ID
-			end
-		end
+				stripped = gsub(stripped, PreprocessorPatt, "")
+				stripped = gsub(stripped, ParensPatt, "()")
 
-		for _, name in gmatch(str, IterStructsPatt) do
-			if Accepts(ignore, name) then
-				Names[name] = ID
+				for line in gmatch(stripped, LinePatt) do
+					local patt = DeclarePatt
+
+					for vtype, var in gmatch(line, patt) do
+						if vtype and vtype ~= "return" then
+							local eq = find(var, "=")
+
+							local_ignore[eq and match(var, IdentifierPatt) or var] = true
+						end
+
+						patt = VarPatt
+					end
+				end
+
+				-- Find any variables (which must be distinguished from structure fields and vector
+				-- components) and function calls (which must be distinguished from definitions). If
+				-- these are not to be ignored (e.g. local functions or built-ins), add their names
+				-- to the dependencies (n.b. this can harmlessly self-reference the code segment).
+				depends_on = BuildDependsOnList(body, IterVarsPatt, ignore, local_ignore, depends_on)
+				depends_on = BuildDependsOnList(body, IterCallsPatt, ignore, local_ignore, depends_on)
 			end
 		end
 
@@ -261,7 +322,7 @@ local function LoadFunctions (input)
 end
 
 -- Visits a node during topological search
-local function Visit (list, marks, index, from, same)
+local function Visit (list, marks, index, from)
 	local mark = marks[index]
 
 	-- Not yet visited: proceed.
@@ -272,11 +333,7 @@ local function Visit (list, marks, index, from, same)
 
 		if deps then
 			for name in pairs(deps) do
-				local dep_id = Names[name]
-
-				if dep_id ~= index then
-					Visit(list, marks, Names[name], name)
-				end
+				Visit(list, marks, Names[name], name)
 			end
 		end
 
@@ -291,7 +348,7 @@ end
 --- Loads code segments for later use by @{FragmentShader} and @{VertexShader}.
 --
 -- The various code components (constants, functions, structs, variables) are gathered and
--- the associated code segments are ordered topologically, to ensure well-formed shaders.
+-- the associated segments are ordered topologically, to ensure well-formed shaders.
 --
 -- Each module being submitted is expected to return either a string or a table.
 --
@@ -309,16 +366,13 @@ end
 -- used as per **prefix**.
 -- * **prefix**: If present (and **from** is absent), prefixed to the name of each module to
 -- be loaded.
--- * **constants**: If present, an array of names of constants-defining modules.
 --
--- Assignments, e.g. `vec2 var = vec2(1.0, 3.5)`, found within the modules' code segments,
--- are examined. Any variables, such as _var_ in this case, if not found in the ignore list,
--- are added to the loader's internal state.
--- * **functions**: If present, an array of names of functions- and struct-defining modules.
+-- Names of code segment modules are placed in the array part.
 --
--- Definitions for functions, e.g. `void action (inout vec2 v) { ... }` and structs, e.g.
--- `struct data { ... }`, are examined. Any identifiers, such as _action_ and _data_ in these
--- cases, if not found in the ignore list, are added to the loader's internal state.
+-- Assignments in the outermost scope, e.g. `vec2 var = vec2(1.0, 3.5)`, in addition to
+-- definitions for functions, e.g. `void action (out vec2 v) { ... }` and structs, e.g.
+-- `struct data { ... }`, are examined. Any identifiers, such as _var_, _action_, and _data_
+-- in these cases, if not found in the ignore list, are registered with the loader.
 -- @treturn boolean Loading succeeded?
 -- @treturn ?string If loading failed, an error message.
 function M.Load (params)
@@ -342,13 +396,9 @@ function M.Load (params)
 		prefix = prefix .. "."
 	end
 
-	-- Register any new constants or functions.
-	for i = 1, #(params.constants or "") do
-		LoadConstants(prefix .. params.constants[i])
-	end
-
-	for i = 1, #(params.functions or "") do
-		LoadFunctions(prefix .. params.functions[i])
+	-- Register any new code segments.
+	for _, v in ipairs(params) do
+		LoadSegments(prefix .. v)
 	end
 
 	-- Topologically sort the registered code segments. If a cycle was introduced, revert any
@@ -368,17 +418,26 @@ function M.Load (params)
 	return true
 end
 
+-- Gather names to be ignored
+local function BuildIgnoreList (code, patt, ignore)
+	for dot, name in gmatch(code, patt) do
+		if dot == "" and Accepts(ignore, name) then
+			ignore = ignore or {}
+
+			ignore[name] = true
+		end
+	end
+
+	return ignore
+end
+
 -- Gather the ID's of a segment and its dependencies
 local function CollectDependencies (collect, id)
 	local deps = DependsOn[id]
 
 	if deps then
 		for name in pairs(deps) do
-			local dep_id = Names[name]
-
-			if dep_id ~= id then
-				CollectDependencies(collect, dep_id)
-			end
+			CollectDependencies(collect, Names[name])
 		end
 	end
 
@@ -398,17 +457,15 @@ local function CollectName (collect, name)
 	return collect
 end
 
--- Gather names to be ignored
-local function BuildIgnoreList (code, patt, ignore)
+-- Gathers names to collect
+local function CollectIntoList (code, patt, ignore, collect)
 	for dot, name in gmatch(code, patt) do
-		if dot == "" and Accepts(ignore, name) then
-			ignore = ignore or {}
-
-			ignore[name] = true
+		if dot == "" and Accepts(ignore, name) then 
+			collect = CollectName(collect, name)
 		end
 	end
 
-	return ignore
+	return collect
 end
 
 -- Infers depended-on code to prepend
@@ -419,22 +476,14 @@ local function Include (code)
 	ignore = BuildIgnoreList(code, AssignmentPatt, ignore)
 	ignore = BuildIgnoreList(code, IterDefsPatt, ignore)
 	ignore = BuildIgnoreList(code, IterStructsPatt, ignore)
+	ignore = IgnorePreprocessor(code, ignore)
 
 	-- Collect all external dependencies, with any necessary disambiguation (less care is
 	-- needed here since much has already been registered).
 	local collect
 
-	for dot, name in gmatch(code, IterVarsPatt) do
-		if dot == "" and Accepts(ignore, name) then 
-			collect = CollectName(collect, name)
-		end
-	end
-
-	for name in gmatch(code, IterCallsPatt) do
-		if Accepts(ignore, name) then
-			collect = CollectName(collect, name)
-		end
-	end
+	collect = CollectIntoList(code, IterVarsPatt, ignore, collect)
+	collect = CollectIntoList(code, IterCallsPatt, ignore, collect)
 
 	-- If any dependencies were found, put them into topologically-sorted order, remove any
 	-- duplicates, stitch them together, and return the result.

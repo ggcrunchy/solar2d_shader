@@ -49,7 +49,7 @@ local M = {}
 -- @number defx As per @{VertexDatum}.
 -- @number defy As per @{VertexDatum}.
 function M.AddVertexProperty (kernel, index, prop1, prop2, combo, defx, defy)
-	effect_props.AddVertexProperty(kernel, "unit_pair", _VertexDatum_(combo, index, defx, defy), prop1, prop2, combo)
+	effect_props.AddVertexPropertyState_Datum(kernel, "unit_pair", _VertexDatum_(combo, index, defx, defy), prop1, prop2, combo)
 end
 
 --- Encodes two numbers &isin; [0, 1] into a **mediump**-range float for retrieval in GLSL.

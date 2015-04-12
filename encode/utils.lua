@@ -59,7 +59,7 @@ function M.DefinePairPropertyHandler (params)
 			if k2 then
 				local u1, u2 = decode(t[combo or hstate[first_key][k2]])
 
-				return combo and u1 or u2
+				return combo ~= nil and u1 or u2
 			end
 		end,
 
@@ -74,7 +74,7 @@ function M.DefinePairPropertyHandler (params)
 				-- parameter. Put the two numbers in order.
 				local combo, v2 = hstate[first_key][k]
 
-				if combo then
+				if combo ~= nil then
 					v2 = state[k2]
 				else
 					combo, v, v2 = hstate[first_key][k2], state[k2], v
@@ -96,14 +96,16 @@ function M.DefinePairPropertyHandler (params)
 
 		-- Initialize --
 		function(hstate, prop1, prop2, combo)
-			hstate[paired_to_key][prop1], hstate[paired_to_key][prop2], hstate[first_key][prop1] = prop2, prop1, combo
+			local paired_to = hstate[paired_to_key]
+
+			paired_to[prop1], paired_to[prop2], hstate[first_key][prop1] = prop2, prop1, combo
 		end,
 
 		-- Has Property --
 		function(hstate, prop)
 			local has_prop = hstate[paired_to_key][prop]
 
-			if hstate[first_key][prop] then
+			if hstate[first_key][prop] ~= nil then
 				return has_prop, min1, max1
 			else
 				return has_prop, min2, max2

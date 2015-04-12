@@ -1,4 +1,9 @@
 --- Helpers for getting and setting effect properties.
+--
+-- Such properties may be raw parameters. The motivation behind this module, however, is that
+-- it is sometimes more convenient to get or set parameters indirectly, say when a more user-
+-- friendly form is available (e.g. degrees vs. radians or pre-evaluated cosine and sine) or
+-- when multiple values are encoded into one value.
 
 --
 -- Permission is hereby granted, free of charge, to any person obtaining
@@ -31,43 +36,50 @@ local loaded = package.loaded
 local setmetatable = setmetatable
 local pairs = pairs
 
+-- Cached module references --
+local _AddVertexPropertyState_
+
 -- Exports --
 local M = {}
 
 -- Kernel -> property data map --
 local PropertyData = setmetatable({}, { __mode = "k" })
 
---
+-- Lazily looks up a kernel's property data
 local function GetPropertyData (kernel)
 	return PropertyData[kernel] or { handlers = {}, hstate = {} }
 end
 
--- --
+-- Set of keys reserved by property handlers (to enforce uniqueness) --
 local Keys = {}
 
--- --
+-- Name -> handler map --
 local Handlers = {}
 
---- DOCME
+--- Adds effect property state to a (vertex userdata-based) kernel.
 -- @ptable kernel Corona shader kernel.
--- @param handler_name Name of property handler, as previously used in @{DefinePropertyHandler}.
--- @string vprop
--- @param ...
--- Some property data is also added to the kernel pertaining to this parameter. Once the
--- kernel's effect is assigned to an object, the effect itself may be a
-function M.AddVertexProperty (kernel, handler_name, vprop, ...)
-	assert(not kernel.graph, "Cannot add vertex property to multi-pass kernel")
-	-- TODO: Uniform data?
+-- @param handler_name Name of handler, as defined by @{DefinePropertyHandler}, which the
+-- new state is assumed to use.
+--
+-- If this is the first association of this handler to _kernel_, its **get** and **set**
+-- routines are added to _kernel_'s list and its keys are initialized in the handler state.
+--
+-- The handler's **init** logic is then called as `init(hstate, ...)`, where _hstate_ is the
+-- handler state. This can be used, say, to assign all the data needed by some properties.
+-- @param ... Initialization arguments.
+function M.AddVertexPropertyState (kernel, handler_name, ...)
+	assert(not kernel.graph, "Cannot add vertex property state to multi-pass kernel")
+	-- TODO: Uniform data? (Actually, as is, could be general-purpose...)
 
-	local pdata, vdata = GetPropertyData(kernel), kernel.vertexData or {}
+	-- If this is the first property, configure the property data and ensure its registration.
+	local pdata = GetPropertyData(kernel)
+	local handlers, hstate = pdata.handlers, pdata.hstate -- capture these rather than pdata itself
 	local props = pdata.properties or {
 		get = function(t, k, state)
 			local v = state[k]
 
 			if v == nil then
-				local hstate = pdata.hstate
-
-				for handler in pairs(pdata.handlers) do
+				for handler in pairs(handlers) do
 					v = handler.get(t, k, state, hstate)
 
 					if v ~= nil then
@@ -78,9 +90,7 @@ function M.AddVertexProperty (kernel, handler_name, vprop, ...)
 		end,
 
 		set = function(t, k, v, state)
-			local hstate = pdata.hstate
-
-			for handler in pairs(pdata.handlers) do
+			for handler in pairs(handlers) do
 				if handler.set(t, k, v, state, hstate) then
 					return
 				end
@@ -90,29 +100,47 @@ function M.AddVertexProperty (kernel, handler_name, vprop, ...)
 		end
 	}
 
-	--
-	local handler = assert(Handlers[handler_name], "Invalid handler")
+	PropertyData[kernel], pdata.properties = pdata, props
 
-	if not pdata.handlers[handler] then
-		for i = 1, #handler, 2 do
-			pdata.hstate[handler[i]] = handler[i + 1] and {}
+	-- If this is the first time this handler has been added to the kernel, register the
+	-- handler and add the keys to the state. Initialize the property state.
+	local prop_handler = assert(Handlers[handler_name], "Invalid handler")
+
+	if not handlers[prop_handler] then
+		for i = 1, #prop_handler, 2 do
+			hstate[prop_handler[i]] = prop_handler[i + 1] and {}
 		end
 
-		pdata.handlers[handler] = true
+		handlers[prop_handler] = true
 	end
 
-	handler.init(pdata.hstate, ...)
+	prop_handler.init(pdata.hstate, ...)
+end
 
-	--
-	pdata.properties = props
+--- Variant of @{AddVertexPropertyState} that takes a vertex datum argument.
+-- @ptable kernel Corona shader kernel.
+-- @param handler_name As per @{AddVertexPropertyState}.
+-- @ptable vertex_datum Vertex userdata component, ostensibly associated with the new state,
+-- that gets added to _kernel_.**vertexData** (which is first created, if necessary).
+--
+-- This is merely for convenience, as it keeps parameter definition and state addition
+-- together in the calling code.
+-- @param ... Initialization arguments.
+function M.AddVertexPropertyState_Datum (kernel, handler_name, vertex_datum, ...)
+	local vdata = kernel.vertexData or {}
 
-	vdata[#vdata + 1] = vprop
+	vdata[#vdata + 1] = vertex_datum
 
-	PropertyData[kernel], kernel.vertexData = pdata, vdata
+	kernel.vertexData = vdata
+
+	_AddVertexPropertyState_(kernel, handler_name, ...)
 end
 
 -- Full name -> property accessors map --
 local Augmented = setmetatable({}, { __mode = "v" })
+
+-- Effect -> state map --
+local State = setmetatable({}, { __mode = "k" })
 
 --
 local function GetAccessors (effect, kernel)
@@ -122,7 +150,8 @@ local function GetAccessors (effect, kernel)
 	if props and not Augmented[name] then
 		local get, index = props.get, effect_mt.__index
 		local set, newindex = props.set, effect_mt.__newindex
-		local state = {}
+
+		State[effect] = {}
 
 		Augmented[name] = {
 			-- Getter --
@@ -132,13 +161,13 @@ local function GetAccessors (effect, kernel)
 				if v ~= nil then
 					return v
 				else
-					return get(t, k, state, object)
+					return get(t, k, State[effect], object)
 				end
 			end or index,
 
 			-- Setter --
 			set = set and function(t, k, v, object)
-				if set(t, k, v, state, object) == "none" then
+				if set(t, k, v, State[effect], object) == "none" then
 					newindex(t, k, v)
 				end
 			end or newindex
@@ -193,7 +222,7 @@ function M.DefinePropertyHandler (name, get, set, init, has_prop, keys)
 	local handler = { get = get, set = set, init = init, has_prop = has_prop }
 
 	for i = 1, #(keys or ""), 2 do
-		Keys[keys[i]] = keys[i]
+		Keys[keys[i]] = true
 
 		handler[#handler + 1] = keys[i]
 		handler[#handler + 1] = not not keys[i + 1]
@@ -233,7 +262,7 @@ function M.FoundInProperties (kernel, prefix, prop)
 	return false
 end
 
---
+-- Prefix-aware helper to resolve effect
 local function GetEffect (object, prefix)
 	local effect = object.fill.effect
 
@@ -275,6 +304,9 @@ function M.SetEffectProperty (object, prefix, prop, v)
 		effect[prop] = v
 	end
 end
+
+-- Cache module members.
+_AddVertexPropertyState_ = M.AddVertexPropertyState
 
 -- Export the module.
 return M
