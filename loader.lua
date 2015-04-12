@@ -40,6 +40,9 @@ local wrap = coroutine.wrap
 local yield = coroutine.yield
 
 -- Modules --
+local ignore_list = require("corona_shader.impl.ignore_list")
+local parser = require("corona_shader.impl.parser")
+local patterns = require("corona_shader.impl.patterns")
 local strings = require("tektite_core.var.strings")
 local table_funcs = require("tektite_core.table.funcs")
 
@@ -49,52 +52,6 @@ local _VertexShader_
 -- Exports --
 local M = {}
 
--- Build up a list of names to ignore when gathering identifiers.
-local IgnoreThese = {}
-
-for _, v in ipairs{
-	"break", "continue", "discard", "do", "else", "for", "if", "return", "while", -- keywords
-	"__FILE__", "__LINE__", "__VERSION__", "GL_ES", "GL_FRAGMENT_PRECISION_HIGH", -- predefined macros
-	"radians", "degrees", "sin", "cos", "tan", "atan", "asin", "acos", -- angle / trig
-	"pow", "exp", "log", "exp2", "log2", "sqrt", "inversesqrt", -- exponential
-	"abs", "sign", "floor", "ceil", "fract", "mod", "min", "max", "clamp", "mix", "step", "smoothstep", -- common
-	"length", "distance", "dot", "cross", "normalize", "faceforward", "reflect", "refract", -- geometric
-	"matrixCompMult", -- matrix
-	"lessThan", "lessThanEqual", "greaterThan", "greaterThanEqual", "equal", "notEqual", "any", "all", "not", -- vector relational
-	"texture2D", "texture2DProj", "textureCube", "texture2DLod", "texture2DProjLod", "textureCubeLod", -- texture lookup
-	"gl_Position", "gl_PointSize", -- vertex shader outputs
-	"gl_FragCoord", "gl_FrontFacing", "gl_PointCoord", -- fragment shader inputs
-	"gl_FragColor", "glFragData", -- fragment shader outputs
-	"gl_MaxVertexAttribs", "gl_MaxVertexUniformVectors", "gl_MaxVaryingVectors", "gl_MaxVertexTextureImageUnits", -- built-in constants
-	"gl_MaxCombinedTextureImageUnits", "gl_MaxTextureImageUnits", "gl_MaxFragmentUniformVectors", "gl_MaxDrawBuffers",
-	"gl_DepthRangeParameters", "gl_DepthRange", -- built-in uniform state
-	"none", "const", "attribute", "uniform", "varying", -- storage qualifiers
-	"in", "out", "inout", -- parameter qualifiers
-	"highp", "mediump", "lowp", "precision", -- precision qualifiers
-	"invariant", "STDGL", -- invariant qualifiers
-	"P_COLOR", "P_DEFAULT", "P_POSITION", "P_RANDOM", "P_UV", -- Corona qualifiers
-	"CoronaVertexUserData", -- Corona data-passing
-	"CoronaSampler0", "CoronaSampler1", -- Corona samplers
-	"CoronaContentScale", "CoronaDeltaTime", "CoronaTotalTime", "CoronaTexCoord", "CoronaTexelSize", -- Corona environment variables
-	"CoronaColorScale", -- Corona functions
-	"FragmentKernel", "VertexKernel" -- Kernel mains
-} do
-	IgnoreThese[v] = true
-end
-
--- Build up a list of built-in types. Add these to the ignore list as well.
-local Types = {}
-
-for _, v in ipairs{
-	"bool", "int", "float", -- singleton constructors
-	"bvec2", "bvec3", "bvec4", -- vector / matrix constructors
-	"ivec2", "ivec3", "ivec4",
-	"mat2", "mat3", "mat4",
-	"vec2", "vec3", "vec4"
-} do
-	IgnoreThese[v], Types[v] = true, true
-end
-
 -- TODO: are arrays well-handled?
 -- What about preprocessor stuff? (including extensions and the associated behaviors)
 
@@ -103,45 +60,16 @@ local Names, ID = {}, 1
 
 -- Is the name okay to gather?
 local function Accepts (ignore, what)
-	return Names[what] ~= ID and not (IgnoreThese[what] or (ignore and ignore[what]))
+	return Names[what] ~= ID and ignore_list.IsAccepted(ignore, what)
 end
 
--- Zero or more spaces --
-local SpacesPatt = "%s*"
+-- Helper to add a name to a (possibly empty) list
+local function AddToList (list, name)
+	list = list or {}
 
--- C-style comments replacement
-local function CommentC (before, up_to, comment, after, last)
-	local has_up_to = gsub(up_to, SpacesPatt, "") ~= ""
-	local has_after = gsub(after, SpacesPatt, "") ~= ""
+	list[name] = true
 
-	if has_up_to and has_after then
-		local mid = gsub(comment, "[^\n]", "") ~= "" and "\n" or " "
-
-		return before .. up_to .. mid .. after .. last
-	elseif has_up_to then
-		return before .. up_to .. last
-	elseif has_after then
-		return before .. after .. last
-	else
-		return before
-	end
-end
-
--- C++-style comments replacement
-local function CommentCPP (before, between, last)
-	if gsub(between, SpacesPatt, "") ~= "" then
-		return before .. between .. last
-	else
-		return before
-	end
-end
-
--- Strips comments from source (to avoid spurious identifiers)
-local function EatComments (str)
-	str = gsub(str, "(\n?)([^\n]-)/%*(.-)%*/([^\n]*)(\n?)", CommentC)
-	str = gsub(str, "(\n?)([^\n]-)//[^\n]*(\n?)", CommentCPP)
-
-	return str
+	return list
 end
 
 -- Helper to "iterate" over a single string
@@ -162,9 +90,7 @@ local function GetInputAndIgnoreList (name)
 			local ignore
 
 			for i = 1, #(input.ignore or "") do
-				ignore = ignore or {}
-
-				ignore[input.ignore[i]] = true
+				ignore = AddToList(ignore, input.ignore[i])
 			end
 
 			return ignore, ipairs(input)
@@ -177,38 +103,10 @@ end
 -- Registered code segment --
 local Code = {}
 
--- A legal GLSL function or variable identifier --
-local IdentifierPatt = "[_%a][_%w]*"
-
--- Optional dot --
-local DotPatt = "(%.?)"
-
--- Assignment to a variable, struct field, or vector components --
-local AssignmentPatt = DotPatt .. SpacesPatt .. "(" .. IdentifierPatt .. ")" .. SpacesPatt .. "="
-
 -- ^^^^ TODO: Matrices, arrays okay?
 
 -- Names depended on by code segements, i.e. coming from other segments --
 local DependsOn = {}
-
--- Braced / parenthesized substrings --
-local BracesPatt = "%b{}"
-local ParensPatt = "%b()"
-
--- Dummy capture (shader source is zero-terminated) for pattern consistency --
-local ZeroPatt = "(%z?)"
-
--- Function calls, definitions; struct declarations; variable usage --
-local IterCallsPatt = ZeroPatt .. "(" .. IdentifierPatt .. ")" .. SpacesPatt .. ParensPatt .. SpacesPatt .. "({?)"
-local IterDefsPatt = ZeroPatt .. "(" .. IdentifierPatt .. ")" .. SpacesPatt .. ParensPatt .. SpacesPatt .. BracesPatt
-local IterStructsPatt = ZeroPatt .. "struct%s+(" .. IdentifierPatt .. ")"
-local IterVarsPatt = DotPatt .. SpacesPatt .. "(" .. IdentifierPatt .. ")" .. SpacesPatt .. "([%({]?)"
-
--- --
-local LinePatt = "[;}]?[^;]*;"
-local DeclarePatt = "(" .. IdentifierPatt .. ")%s+(" .. IdentifierPatt .. ")" .. SpacesPatt .. "[=,;]"
-local VarPatt = "(" .. IdentifierPatt .. ")" .. SpacesPatt .. "[=,;]"
-local ParamsPatt = "(" .. IdentifierPatt .. ")" .. SpacesPatt .. "[,%)]"
 
 -- Add names, unless ignored
 local function AddNames (code, patt, ignore)
@@ -223,87 +121,90 @@ end
 local function BuildDependsOnList (code, patt, ignore, local_ignore, depends_on)
 	for dot, name, token in gmatch(code, patt) do
 		if dot == "" and token == "" and Accepts(ignore, name) and Accepts(local_ignore, name) then
-			depends_on = depends_on or {}
-
-			depends_on[name] = true
+			depends_on = AddToList(depends_on, name)
 		end
 	end
 
 	return depends_on
 end
 
--- --
-local PreprocessorPatt = "#(" .. IdentifierPatt .. ")([^\n]*)"
-
---
+-- Ignore identifiers used by the preprocessor
 local function IgnorePreprocessor (str, ignore)
-	for dir, rest in gmatch(str, PreprocessorPatt) do
-		ignore = ignore or {}
-
+	for dir, rest in gmatch(str, patterns.Preprocessor) do
+		-- #ifdef and #ifndef look at one symbol, whereas #define will have rather arbitrary
+		-- contents. However, only the symbol being defined is relevant; the rest may consist
+		-- of identifiers that are not to be ignored.
 		if dir == "define" or dir == "ifdef" or dir == "ifndef" then
-			for name in gmatch(rest, IdentifierPatt) do
-				ignore[name] = true
+			ignore = AddToList(ignore, match(rest, patterns.Identifier))
+
+		-- Any identifiers in #if directives, meanwhile, are symbols being compared.
+		elseif dir == "if" then
+			for name in gmatch(rest, patterns.Identifier) do
+				ignore = AddToList(ignore, name)
 			end
+		-- TODO: extension? (might be more robust, since "warn", "enable", etc. should be legal elsewhere...)
 		end
 
-		ignore[dir] = true
+		ignore = AddToList(ignore, dir)
 	end
 
 	return ignore
 end
-
--- --
-local SignaturePatt = "(" .. IdentifierPatt .. ")" .. SpacesPatt .. "(" .. ParensPatt .. ")" .. SpacesPatt .. "(" .. BracesPatt .. ")"
 
 -- Loads one or more code segments
 local function LoadSegments (input)
 	local ignore, f, s, v = GetInputAndIgnoreList(input)
 
 	for _, str in f, s, v do
-		str = EatComments(str)
+		str = parser.StripComments(str)
 
 		-- Associate assignments to variables, as well as function and structure definitions,
 		-- to the code segment. For all intents and purposes, the latter (i.e. constructors)
 		-- are interpreted as functions. The contents of functions and structs are excised in
 		-- order to reduce all the irrelevant assignments inside function bodies.
-		local outer = gsub(str, BracesPatt, "{}")
+		local outer = gsub(str, patterns.InBraces, "{}")
 
-		AddNames(outer, AssignmentPatt, ignore)
-		AddNames(outer, IterDefsPatt, ignore)
-		AddNames(outer, IterStructsPatt, ignore)
+		AddNames(outer, patterns.Assignment, ignore)
+		AddNames(outer, patterns.DefineFunc, ignore)
+		AddNames(outer, patterns.Struct, ignore)
 
-		--
+		-- Build up dependencies, ignoring local variables. This must be done for each (non-
+		-- ignored) function, since an identifier may be local to one function but refer to
+		-- an actual external dependency in another.
 		local depends_on
 
-		for func, params, body in gmatch(str, SignaturePatt) do
+		for func, params, body in gmatch(str, patterns.Signature) do
 			if not (ignore and ignore[func]) then
-				--
-				local local_ignore = {}
+				-- Ignore the function's parameters, plus preprocessor directives both in the
+				-- function and in the surrounding scope.
+				local local_ignore
 
-				for param in gmatch(params, ParamsPatt) do
-					local_ignore[param] = true
+				for param in gmatch(params, patterns.Param) do
+					local_ignore = AddToList(local_ignore, param)
 				end
 
-				IgnorePreprocessor(outer, local_ignore)
-				IgnorePreprocessor(body, local_ignore)
+				local_ignore = IgnorePreprocessor(outer, local_ignore)
+				local_ignore = IgnorePreprocessor(body, local_ignore)
 
-				--
+				-- With the preprocessor directives and parameters addressed, filter them
+				-- out of the code. Ignore any variables declared in the function body.
 				local stripped = body
 
-				stripped = gsub(stripped, PreprocessorPatt, "")
-				stripped = gsub(stripped, ParensPatt, "()")
+				stripped = gsub(stripped, patterns.Preprocessor, "")
+				stripped = gsub(stripped, patterns.InParens, "()")
 
-				for line in gmatch(stripped, LinePatt) do
-					local patt = DeclarePatt
+				for line in gmatch(stripped, patterns.Statement) do
+					local patt = patterns.Declaration
 
 					for vtype, var in gmatch(line, patt) do
 						if vtype and vtype ~= "return" then
 							local eq = find(var, "=")
+							local lhs = eq and match(var, patterns.Identifier) or var
 
-							local_ignore[eq and match(var, IdentifierPatt) or var] = true
+							local_ignore = AddToList(local_ignore, lhs)
 						end
 
-						patt = VarPatt
+						patt = patterns.Var
 					end
 				end
 
@@ -311,8 +212,8 @@ local function LoadSegments (input)
 				-- components) and function calls (which must be distinguished from definitions). If
 				-- these are not to be ignored (e.g. local functions or built-ins), add their names
 				-- to the dependencies (n.b. this can harmlessly self-reference the code segment).
-				depends_on = BuildDependsOnList(body, IterVarsPatt, ignore, local_ignore, depends_on)
-				depends_on = BuildDependsOnList(body, IterCallsPatt, ignore, local_ignore, depends_on)
+				depends_on = BuildDependsOnList(body, patterns.UseVar, ignore, local_ignore, depends_on)
+				depends_on = BuildDependsOnList(body, patterns.Call, ignore, local_ignore, depends_on)
 			end
 		end
 
@@ -422,9 +323,7 @@ end
 local function BuildIgnoreList (code, patt, ignore)
 	for dot, name in gmatch(code, patt) do
 		if dot == "" and Accepts(ignore, name) then
-			ignore = ignore or {}
-
-			ignore[name] = true
+			ignore = AddToList(ignore, name)
 		end
 	end
 
@@ -473,17 +372,17 @@ local function Include (code)
 	-- Ignore any local assignments and definitions.
 	local ignore
 
-	ignore = BuildIgnoreList(code, AssignmentPatt, ignore)
-	ignore = BuildIgnoreList(code, IterDefsPatt, ignore)
-	ignore = BuildIgnoreList(code, IterStructsPatt, ignore)
+	ignore = BuildIgnoreList(code, patterns.Assignment, ignore)
+	ignore = BuildIgnoreList(code, patterns.DefineFunc, ignore)
+	ignore = BuildIgnoreList(code, patterns.Struct, ignore)
 	ignore = IgnorePreprocessor(code, ignore)
 
 	-- Collect all external dependencies, with any necessary disambiguation (less care is
 	-- needed here since much has already been registered).
 	local collect
 
-	collect = CollectIntoList(code, IterVarsPatt, ignore, collect)
-	collect = CollectIntoList(code, IterCallsPatt, ignore, collect)
+	collect = CollectIntoList(code, patterns.UseVar, ignore, collect)
+	collect = CollectIntoList(code, patterns.Call, ignore, collect)
 
 	-- If any dependencies were found, put them into topologically-sorted order, remove any
 	-- duplicates, stitch them together, and return the result.
@@ -558,7 +457,7 @@ end
 -- * **pretty**: If true, the code will be somewhat prettied for printing.
 -- @treturn string Resolved shader code.
 function M.VertexShader (code, opts)
-	code = EatComments(code)
+	code = parser.StripComments(code)
 
 	local include = Include(code)
 
