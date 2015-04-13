@@ -41,8 +41,8 @@ local M = {}
 -- * **max_value**: ...and maximum.
 -- * **min_value2**: Minimum value of number #2... (If absent, uses **min_value**.)
 -- * **max_value2**: ...and maximum. (If absent, uses **max_value**.)
--- * **first_key**: Unique handler state key of "first" field. If absent, auto-generated.
--- * **paired_to_key**: Unique handler state key of "paired to" field. If absent, auto-generated.
+-- * **first_key**: Unique effect state key of "first" field. If absent, auto-generated.
+-- * **paired_to_key**: Unique effect state key of "paired to" field. If absent, auto-generated.
 function M.DefinePairPropertyHandler (params)
 	local decode, encode = params.decode, params.encode
 	local min1, max1 = params.min_value, params.max_value
@@ -53,31 +53,31 @@ function M.DefinePairPropertyHandler (params)
 	effect_props.DefinePropertyHandler(params.name,
 
 		-- Getter --
-		function(t, k, _, hstate)
-			local combo, k2 = hstate[first_key][k], hstate[paired_to_key][k]
+		function(t, k, _, effect_state)
+			local combo, k2 = effect_state[first_key][k], effect_state[paired_to_key][k]
 
 			if k2 then
-				local u1, u2 = decode(t[combo or hstate[first_key][k2]])
+				local u1, u2 = decode(t[combo or effect_state[first_key][k2]])
 
 				return combo ~= nil and u1 or u2
 			end
 		end,
 
 		-- Setter --
-		function(t, k, v, state, hstate)
-			local k2 = hstate[paired_to_key][k]
+		function(t, k, v, state, effect_state)
+			local k2 = effect_state[paired_to_key][k]
 
 			if k2 then
 				state[k] = v
 
 				-- Figure out the names of the second number and the "combined" kernel
 				-- parameter. Put the two numbers in order.
-				local combo, v2 = hstate[first_key][k]
+				local combo, v2 = effect_state[first_key][k]
 
 				if combo ~= nil then
 					v2 = state[k2]
 				else
-					combo, v, v2 = hstate[first_key][k2], state[k2], v
+					combo, v, v2 = effect_state[first_key][k2], state[k2], v
 				end
 
 				-- If one of the two numbers has yet to be evaluated, decode the default
@@ -95,17 +95,17 @@ function M.DefinePairPropertyHandler (params)
 		end,
 
 		-- Initialize --
-		function(hstate, prop1, prop2, combo)
-			local paired_to = hstate[paired_to_key]
+		function(effect_state, prop1, prop2, combo)
+			local paired_to = effect_state[paired_to_key]
 
-			paired_to[prop1], paired_to[prop2], hstate[first_key][prop1] = prop2, prop1, combo
+			paired_to[prop1], paired_to[prop2], effect_state[first_key][prop1] = prop2, prop1, combo
 		end,
 
 		-- Has Property --
-		function(hstate, prop)
-			local has_prop = hstate[paired_to_key][prop]
+		function(effect_state, prop)
+			local has_prop = effect_state[paired_to_key][prop]
 
-			if hstate[first_key][prop] ~= nil then
+			if effect_state[first_key][prop] ~= nil then
 				return has_prop, min1, max1
 			else
 				return has_prop, min2, max2

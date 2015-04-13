@@ -30,14 +30,20 @@
 
 -- Standard library imports --
 local assert = assert
+local find = string.find
 local format = string.format
 local getmetatable = getmetatable
 local setmetatable = setmetatable
 local pairs = pairs
+local sub = string.sub
 
 -- Cached module references --
 local _AddPropertyState_
+local _FoundInProperties_Parsed_
+local _GetEffectProperty_Parsed_
 local _GetName_
+local _ParseProperty_
+local _SetEffectProperty_Parsed_
 
 -- Exports --
 local M = {}
@@ -45,17 +51,19 @@ local M = {}
 -- Name -> subeffects map --
 local MultiPass = {}
 
---- DOCME
+--- Prepares a multi-pass kernel for later use in @{AssignEffect}.
+-- @ptable kernel Corona shader kernel.
 function M.AddMultiPassEffect (kernel)
-	assert(kernel.graph, "Not a multi-pass kernel")
-
+	local graph = assert(kernel.graph, "Not a multi-pass kernel")
 	local name = _GetName_(kernel)
 
 	if not MultiPass[name] then
 		local sub_effects = {}
 
-		for k, v in pairs(kernel.graph.nodes) do
+		for k, v in pairs(graph.nodes) do
 			sub_effects[k] = v.effect
+			-- ^^^^ TODO: Could auto-require() / defineEffect() these, if not in package.loaded?
+			-- Perhaps down the line, during AssignEffect()?
 		end
 
 		MultiPass[name] = sub_effects
@@ -79,23 +87,26 @@ local PropertyData = {}
 -- If this is the first association of this handler to _kernel_, its **get** and **set**
 -- routines are added to _kernel_'s list and its keys are initialized in the handler state.
 --
--- The handler's **init** logic is then called as `init(hstate, ...)`, where _hstate_ is the
--- handler state. This can be used, say, to assign all the data needed by some properties.
+-- The handler's **init** logic is then called as `init(effect_state, ...)`, where _effect\_state_
+-- is a table shared by any instance of _kernel_'s effect. This can be used, say, to assign
+-- all the data needed by some properties.
 -- @param ... Initialization arguments.
 function M.AddPropertyState (kernel, handler_name, ...)
-	assert(not kernel.graph, "Cannot add property state to multi-pass kernel")
+	local prop_handler = assert(Handlers[handler_name], "Invalid handler")
 
-	-- If this is the first property, configure the property data and ensure its registration.
+	assert(not kernel.graph, "Cannot add property state to multi-pass kernel")	
+
+	-- If this is the first property, configure and register the property data.
 	local name = _GetName_(kernel)
-	local pdata = PropertyData[name] or { handlers = {}, hstate = {} }
-	local handlers, hstate = pdata.handlers, pdata.hstate -- capture these rather than pdata itself
+	local pdata = PropertyData[name] or { handlers = {}, effect_state = {} }
+	local handlers, effect_state = pdata.handlers, pdata.effect_state -- capture these rather than pdata itself
 	local props = pdata.properties or {
 		get = function(t, k, state)
 			local v = state[k]
 
 			if v == nil then
 				for handler in pairs(handlers) do
-					v = handler.get(t, k, state, hstate)
+					v = handler.get(t, k, state, effect_state)
 
 					if v ~= nil then
 						return v
@@ -106,7 +117,7 @@ function M.AddPropertyState (kernel, handler_name, ...)
 
 		set = function(t, k, v, state)
 			for handler in pairs(handlers) do
-				if handler.set(t, k, v, state, hstate) then
+				if handler.set(t, k, v, state, effect_state) then
 					return
 				end
 			end
@@ -119,17 +130,15 @@ function M.AddPropertyState (kernel, handler_name, ...)
 
 	-- If this is the first time this handler has been added to the kernel, register the
 	-- handler and add the keys to the state. Initialize the property state.
-	local prop_handler = assert(Handlers[handler_name], "Invalid handler")
-
 	if not handlers[prop_handler] then
 		for i = 1, #prop_handler, 2 do
-			hstate[prop_handler[i]] = prop_handler[i + 1] and {}
+			effect_state[prop_handler[i]] = prop_handler[i + 1] and {}
 		end
 
 		handlers[prop_handler] = true
 	end
 
-	prop_handler.init(pdata.hstate, ...)
+	prop_handler.init(pdata.effect_state, ...)
 end
 
 --- Variant of @{AddPropertyState} that takes a vertex datum argument.
@@ -137,12 +146,12 @@ end
 -- The kernel may not define uniform userdata.
 -- @ptable kernel Corona shader kernel.
 -- @param handler_name As per @{AddPropertyState}.
--- @ptable vertex_datum Vertex userdata component, ostensibly associated with the new state,
--- that gets added to _kernel_.**vertexData** (which is first created, if necessary).
+-- @ptable vertex_datum Vertex userdata component, which is assumed to be associated with the
+-- new state. I is added to _kernel_.**vertexData** (if absent, this is first created).
 --
--- This is merely for convenience, as it keeps parameter definition and state addition
--- together in the calling code.
--- @param ... Initialization arguments.
+-- This function is merely for convenience, meant to keep the parameter definition and adding
+-- of state together in the calling code.
+-- @param ... Initialization arguments, as per @{AddPropertyState}.
 function M.AddPropertyState_VertexDatum (kernel, handler_name, vertex_datum, ...)
 	-- TODO: assert no uniform data
 
@@ -197,10 +206,11 @@ local Proxy = setmetatable({}, { __mode = "k" })
 --- If no property data is associated with _name_'s effect, calling this is equivalent to
 -- the assignment `object.fill.effect = name`.
 --
--- Otherwise, the effect is first assigned, then augmented so that calls to @{GetEffectProperty}
--- and @{SetEffectProperty} can be used on it.
+-- Otherwise, the effect, after being assigned, is augmented so that @{GetEffectProperty}
+-- and @{SetEffectProperty} pick up on any extended properties.
 -- @pobject object Display object.
--- @string name Effect name to assign.
+-- @string name Effect name to assign, cf. @{GetName}.
+-- @see AddMultiPassEffect, AddPropertyState
 function M.AssignEffect (object, name)
 	object.fill.effect = name
 
@@ -223,21 +233,34 @@ function M.AssignEffect (object, name)
 end
 
 --- DOCME
--- @param name
--- @callable get
--- @callable set
--- @callable init
--- @callable has_prop
--- @ptable[opt] keys
+-- @param name Friendly name of the new property type.
+-- @callable get Routine used to get a property value associated with this handler, cf.
+-- @{GetEffectProperty}.
+-- @callable set Routined used to set a property value associated with this handler, cf.
+-- @{SetEffectProperty}.
+-- @callable init Routine used to initialize property state associated with this handler, cf.
+-- @{AddPropertyState}.
+-- @callable has_prop Routine used to check whether an effect has a property associated with
+-- this handler, cf. @{FoundInProperties}.
+-- @array[opt] keys If present, an array of the form `{ name1, is_table1, ..., namen, is_tablen }`,
+-- where each _name?_ must not have been given in any previous call to **DefinePropertyHandler**.
+--
+-- When this type of property state is first added to an effect's property data, the _name?_
+-- keys in the effect state are populated: if the corresponding _is\_table?_ is true, the
+-- value will be an empty table, otherwise **false**.
+--
+-- Non-table keys are meant to be changed, but well-behaved setters must leave tables intact,
+-- instead assigning only to their contents. Getters and property predicates, meanwhile,
+-- ought to be read-only.
 function M.DefinePropertyHandler (name, get, set, init, has_prop, keys)
 	assert(not Handlers[name], "Property handler name already in use")
 
-	--
+	-- Ensure that no keys belong to an already-defined handler.
 	for i = 1, #(keys or ""), 2 do
 		assert(not Keys[keys[i]], "Key already in use")
 	end
 
-	--
+	-- Put the keys into a more convenient form and register all the handler functions.
 	local handler = { get = get, set = set, init = init, has_prop = has_prop }
 
 	for i = 1, #(keys or ""), 2 do
@@ -251,26 +274,37 @@ function M.DefinePropertyHandler (name, get, set, init, has_prop, keys)
 end
 
 --- DOCME
--- @ptable kernel
--- @string[opt] prefix
+-- @string name Resolved effect name, cf. @{GetName}.
 -- @string prop
--- @treturn boolean X
--- @treturn ?number Y
--- @treturn ?number Z
-function M.FoundInProperties (name, prefix, prop)
-	--
-	if prefix then
-		name = assert(MultiPass[name], "Kernel is not multi-pass")[prefix]
+-- @treturn boolean Does _prop_ belong to the effect?
+-- @treturn ?number If the property exists, its minimum value...
+-- @treturn ?number ...and maximum value.
+function M.FoundInProperties (name, prop)
+	return _FoundInProperties_Parsed_(name, _ParseProperty_(prop))
+end
+
+--- Variant of @{FoundInProperties} with the property parsed, as per @{ParseProperty}.
+-- @string name Resolved effect name, cf. @{GetName}.
+-- @string[opt] pass If present, the name of the effect pass.
+-- @string prop Property to find.
+-- @treturn boolean Does _prop_ belong to the effect?
+-- @treturn ?number If the property exists, its minimum value...
+-- @treturn ?number ...and maximum value.
+function M.FoundInProperties_Parsed (name, pass, prop)
+	-- If the property would be in a pass, search in that instead.
+	if pass then
+		name = assert(MultiPass[name], "Kernel is not multi-pass")[pass]
 	end
 
-	--
+	-- If one of the effect's property predicates, passes, report success along with the
+	-- minimum and maximum property values; otherwise, fail.
 	local pdata = PropertyData[name]
 
 	if pdata then
-		local hstate = pdata.hstate
+		local effect_state = pdata.effect_state
 
 		for handler in pairs(pdata.handlers) do
-			local does_have, min, max = handler.has_prop(hstate, prop)
+			local does_have, min, max = handler.has_prop(effect_state, prop)
 
 			if does_have then
 				return true, min, max
@@ -281,26 +315,32 @@ function M.FoundInProperties (name, prefix, prop)
 	return false
 end
 
--- ^^^ TODO: Could switch this to name, too? (Only real reason to have PropertyData: kernel -> data)
-
--- Prefix-aware helper to resolve effect
-local function GetEffect (object, prefix)
+-- Multi-pass-aware helper to resolve effect
+local function GetEffect (object, pass)
 	local effect = object.fill.effect
 
-	if prefix then
-		return effect[prefix]
+	if pass then
+		return effect[pass]
 	else
 		return effect
 	end
 end
 
 --- DOCME
--- @pobject object
--- @string[opt] prefix
--- @string prop
--- @return V
-function M.GetEffectProperty (object, prefix, prop)
-	local effect = GetEffect(object, prefix)
+-- @pobject object Object with effect under **fill.effect**.
+-- @string prop Property to get.
+-- @return Property value, or **nil** if absent.
+function M.GetEffectProperty (object, prop)
+	return _GetEffectProperty_Parsed_(object, _ParseProperty_(prop))
+end
+
+--- Variant of @{GetEffectProperty} with the property parsed, as per @{ParseProperty}.
+-- @pobject object Object with effect under **fill.effect**.
+-- @string[opt] pass If present, the name of the effect pass.
+-- @string prop Property to get.
+-- @return Property value, or **nil** if absent.
+function M.GetEffectProperty_Parsed (object, pass, prop)
+	local effect = GetEffect(object, pass)
 	local proxy = Proxy[effect]
 
 	if proxy then
@@ -312,18 +352,42 @@ end
 
 --- Gets the name used to assign the effect defined by the kernel.
 -- @ptable kernel Corona shader kernel.
--- @treturn string Resolved name.
+-- @treturn string Resolved effect name.
 function M.GetName (kernel)
 	return format("%s.%s.%s", kernel.category, kernel.group or "custom", kernel.name)
 end
 
+--- Parses a property, which may be composed, i.e. of the form **"pass.name"**.
+-- @string prop Property to parse.
+-- @treturn ?string If _prop_ is composed, _pass_; otherwise, **nil**.
+-- @treturn string If _prop_ is composed, _name_; otherwise, _prop_.
+function M.ParseProperty (prop)
+	local dot = find(prop, "%.")
+
+	if dot then
+		return sub(prop, 1, dot - 1), sub(prop, dot + 1)
+	else
+		return nil, prop
+	end
+end
+
 --- DOCME
--- @pobject object
--- @string[opt] prefix
--- @string prop
--- @param v
-function M.SetEffectProperty (object, prefix, prop, v)
-	local effect = GetEffect(object, prefix)
+-- @pobject object Object with effect under **fill.effect**.
+-- @string prop Property to set.
+-- @param v Value to assign.
+function M.SetEffectProperty (object, prop, v)
+	local pass, eprop = _ParseProperty_(prop)
+
+	_SetEffectProperty_Parsed_(object, pass, eprop, v)
+end
+
+--- Variant of @{SetEffectProperty} with the property parsed, as per @{ParseProperty}.
+-- @pobject object Object with effect under **fill.effect**.
+-- @string[opt] pass If present, the name of the effect pass.
+-- @string prop Property to set.
+-- @param v Value to assign.
+function M.SetEffectProperty_Parsed (object, pass, prop, v)
+	local effect = GetEffect(object, pass)
 	local proxy = Proxy[effect]
 
 	if proxy then
@@ -335,7 +399,11 @@ end
 
 -- Cache module members.
 _AddPropertyState_ = M.AddPropertyState
+_FoundInProperties_Parsed_ = M.FoundInProperties_Parsed
+_GetEffectProperty_Parsed_ = M.GetEffectProperty_Parsed
 _GetName_ = M.GetName
+_ParseProperty_ = M.ParseProperty
+_SetEffectProperty_Parsed_ = M.SetEffectProperty_Parsed
 
 -- Export the module.
 return M
