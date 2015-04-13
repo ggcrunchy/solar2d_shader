@@ -67,10 +67,11 @@ for _, v in ipairs{
 	IgnoreThese[v] = true
 end
 
---- DOCME
--- @ptable[opt] ignore_list
--- @string name
--- @treturn boolean X
+--- Indicates whether a name is accepted after checking against a master list, as well as any
+-- user-provided ignore list. 
+-- @ptable[opt] ignore_list If present, _name_ is ignored when `ignore_list[name]` is true.
+-- @string name Name to check.
+-- @treturn boolean Name is accepted?
 function M.IsAccepted (ignore_list, name)
 	if IgnoreThese[name] then
 		return false

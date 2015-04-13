@@ -32,7 +32,6 @@
 local assert = assert
 local format = string.format
 local getmetatable = getmetatable
-local loaded = package.loaded
 local setmetatable = setmetatable
 local pairs = pairs
 
@@ -42,12 +41,48 @@ local _AddVertexPropertyState_
 -- Exports --
 local M = {}
 
+-- Name -> subeffects map --
+local MultiPass = setmetatable({}, { __mode = "v" })
+
+--
+local function ResolveName (kernel)
+	return format("%s.%s.%s", kernel.category, kernel.group or "custom", kernel.name)
+end
+
+--- DOCME
+function M.AddMultiPassEffect (kernel)
+	assert(kernel.graph, "Not a multi-pass kernel")
+
+	local name = ResolveName(kernel)
+
+	if not MultiPass[name] then
+		local sub_effects = {}
+
+		for k, v in pairs(kernel.graph.nodes) do
+			sub_effects[k] = v.effect
+		end
+
+		MultiPass[name] = sub_effects
+	end
+end
+
 -- Kernel -> property data map --
 local PropertyData = setmetatable({}, { __mode = "k" })
 
+-- Name -> property data map --
+local NamedPropertyData = setmetatable({}, { __mode = "v" })
+
 -- Lazily looks up a kernel's property data
 local function GetPropertyData (kernel)
-	return PropertyData[kernel] or { handlers = {}, hstate = {} }
+	local pdata = PropertyData[kernel]
+
+	if not pdata then
+		pdata = { handlers = {}, hstate = {} }
+
+		NamedPropertyData[ResolveName(kernel)] = pdata
+	end
+
+	return pdata
 end
 
 -- Set of keys reserved by property handlers (to enforce uniqueness) --
@@ -142,10 +177,9 @@ local Augmented = setmetatable({}, { __mode = "v" })
 -- Effect -> state map --
 local State = setmetatable({}, { __mode = "k" })
 
---
-local function GetAccessors (effect, kernel)
-	local effect_mt, props = getmetatable(effect), PropertyData[kernel].properties
-	local name = format("%s.%s.%s", kernel.category, kernel.group or "custom", kernel.name)
+-- Lazily gets an augmented effect instance's property accessors
+local function GetAccessors (effect, name)
+	local effect_mt, props = getmetatable(effect), NamedPropertyData[name].properties
 
 	if props and not Augmented[name] then
 		local get, index = props.get, effect_mt.__index
@@ -180,26 +214,31 @@ end
 -- Fill effect -> proxy map --
 local Proxy = setmetatable({}, { __mode = "k" })
 
---- DOCME
--- @pobject object
--- @ptable kernel
-function M.AugmentEffect (object, kernel)
-	local effect, graph = object.fill.effect, kernel.graph
+--- If no property data is associated with _name_'s effect, calling this is equivalent to
+-- the assignment `object.fill.effect = name`.
+--
+-- Otherwise, the effect is first assigned, then augmented so that calls to @{GetEffectProperty}
+-- and @{SetEffectProperty} can be used on it.
+-- @pobject object Display object.
+-- @string name Effect name to assign.
+function M.AssignEffect (object, name)
+	object.fill.effect = name
 
-	--
-	if graph then
-		for k, v in pairs(graph.nodes) do
-			local ekernel = assert(effect[k], "Sub-effect not loaded")
+	-- Multi-pass: attach accessors to each component effect.
+	local effect, nodes = object.fill.effect, MultiPass[name]
+
+	if nodes then
+		for k, v in pairs(nodes) do
 			local sub_effect = effect[k]
 
-			if sub_effect and not Proxy[sub_effect] then
-				Proxy[sub_effect] = GetAccessors(sub_effect, ekernel)
+			if not Proxy[sub_effect] then
+				Proxy[sub_effect] = GetAccessors(sub_effect, v)
 			end
 		end
-
-	--
+-- ^^^ TODO: These multi-pass checks probably don't do much good (too late and / or paranoid)
+	-- Otherwise, attach accessors to the single effect.
 	elseif not Proxy[effect] then
-		Proxy[effect] = GetAccessors(effect, kernel)
+		Proxy[effect] = GetAccessors(effect, name)
 	end
 end
 
@@ -261,6 +300,8 @@ function M.FoundInProperties (kernel, prefix, prop)
 
 	return false
 end
+
+-- ^^^ TODO: Could switch this to name, too? (Only real reason to have PropertyData: kernel -> data)
 
 -- Prefix-aware helper to resolve effect
 local function GetEffect (object, prefix)

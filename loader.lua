@@ -53,7 +53,6 @@ local _VertexShader_
 local M = {}
 
 -- TODO: are arrays well-handled?
--- What about preprocessor stuff? (including extensions and the associated behaviors)
 
 -- Identifier -> code segment ID map; next available segment ID --
 local Names, ID = {}, 1
@@ -142,7 +141,6 @@ local function IgnorePreprocessor (str, ignore)
 			for name in gmatch(rest, patterns.Identifier) do
 				ignore = AddToList(ignore, name)
 			end
-		-- TODO: extension? (might be more robust, since "warn", "enable", etc. should be legal elsewhere...)
 		end
 
 		ignore = AddToList(ignore, dir)
