@@ -32,7 +32,7 @@ local effect_props = require("corona_shader.effect_props")
 local encoding_utils = require("corona_shader.encode.utils")
 
 -- Cached module references --
-local _FromXY_
+local _Encode_
 local _VertexDatum_
 
 -- Exports --
@@ -40,7 +40,7 @@ local M = {}
 
 --- Adds a unit pair-style parameter to a kernel.
 --
--- Some property data is also added for the parameter, cf. @{corona_shader.effect_props.AddVertexProperty}.
+-- Some property data is also added for the parameter, cf. @{corona_shader.effect_props.AddPropertyState}.
 -- @ptable kernel Corona shader kernel.
 -- @uint index Vertex userdata component index, cf. @{VertexDatum}.
 -- @string prop1 Friendly name of number #1...
@@ -49,24 +49,24 @@ local M = {}
 -- @number defx As per @{VertexDatum}.
 -- @number defy As per @{VertexDatum}.
 function M.AddVertexProperty (kernel, index, prop1, prop2, combo, defx, defy)
-	effect_props.AddVertexPropertyState_Datum(kernel, "unit_pair", _VertexDatum_(combo, index, defx, defy), prop1, prop2, combo)
+	effect_props.AddPropertyState_VertexDatum(kernel, "unit_pair", _VertexDatum_(combo, index, defx, defy), prop1, prop2, combo)
 end
 
 --- Encodes two numbers &isin; [0, 1] into a **mediump**-range float for retrieval in GLSL.
 -- @number x Number #1...
 -- @number y ...and #2.
 -- @treturn number Encoded pair.
-function M.FromXY (x, y)
+function M.Encode (x, y)
 	y = y - .5
 
 	return (y < 0 and -1 or 1) * (floor(1023 * x) + abs(y))
 end
 
---- Decodes a **mediump**-range float, assumed to be encoded as per @{FromXY}.
+--- Decodes a **mediump**-range float, assumed to be encoded as per @{Encode}.
 -- @number pair Encoded pair.
 -- @treturn number Number #1...
 -- @treturn number ...and #2.
-function M.ToXY (pair)
+function M.Decode (pair)
 	local apair = abs(pair)
 	local xpart = floor(apair)
 
@@ -75,16 +75,16 @@ end
 
 --- Prepares a unit pair-style parameter for addition to a kernel.
 --
--- This parameter should be assigned values encoded as per @{FromXY}.
+-- This parameter should be assigned values encoded as per @{Encode}.
 -- @string name Friendly name of shader parameter.
 -- @uint index Vertex userdata component index.
--- @number defx Default number #1, cf. @{FromXY}...
+-- @number defx Default number #1, cf. @{Encode}...
 -- @number defy ...and number #2.
 -- @treturn table Vertex userdata component.
 function M.VertexDatum (name, index, defx, defy)
 	return {
 		name = name,
-		default = _FromXY_(defx, defy),
+		default = _Encode_(defx, defy),
 		min = -1023.5, max = 1023.5,
 		index = index
 	}
@@ -93,12 +93,12 @@ end
 -- Register the "unit_pair" property handler.
 encoding_utils.DefinePairPropertyHandler{
 	name = "unit_pair",
-	decode = M.ToXY, encode = M.FromXY,
+	decode = M.Decode, encode = M.Encode,
 	min_value = 0, max_value = 1
 }
 
 -- Cache module members.
-_FromXY_ = M.FromXY
+_Encode_ = M.Encode
 _VertexDatum_ = M.VertexDatum
 
 -- Export the module.

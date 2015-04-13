@@ -37,12 +37,12 @@ end
 -- @number x A value &isin; [0, 1]...
 -- @number y ...and another one.
 -- @treturn number The packed value.
-function M.FromXY (x, y)
+function M.Encode (x, y)
 	return floor(1023 * x) + y
 end
 
 --- DOCME
-function M.ToXY (pair)
+function M.Decode (pair)
 	local xpart = floor(pair)
 
 	return xpart / 1023, pair - xpart
@@ -52,13 +52,13 @@ end
 function M.VertexDatum (name, index, defx, defy)
 	return {
 		name = name,
-		default = _FromXY_(defx, defy),
+		default = _Encode_(defx, defy),
 		min = 0, max = 1024 - 1 / 1024,
 		index = index
 	}
 end
 
 --
-pack_utils.DefinePairPropertyHandler("unit_open", M.ToXY, M.FromXY, 0, 1 - 1 / 1024)
+pack_utils.DefinePairPropertyHandler("unit_open", M.Decode, M.Encode, 0, 1 - 1 / 1024)
 
 ]=]

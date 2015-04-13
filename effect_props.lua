@@ -36,24 +36,20 @@ local setmetatable = setmetatable
 local pairs = pairs
 
 -- Cached module references --
-local _AddVertexPropertyState_
+local _AddPropertyState_
+local _GetName_
 
 -- Exports --
 local M = {}
 
 -- Name -> subeffects map --
-local MultiPass = setmetatable({}, { __mode = "v" })
-
---
-local function ResolveName (kernel)
-	return format("%s.%s.%s", kernel.category, kernel.group or "custom", kernel.name)
-end
+local MultiPass = {}
 
 --- DOCME
 function M.AddMultiPassEffect (kernel)
 	assert(kernel.graph, "Not a multi-pass kernel")
 
-	local name = ResolveName(kernel)
+	local name = _GetName_(kernel)
 
 	if not MultiPass[name] then
 		local sub_effects = {}
@@ -66,32 +62,16 @@ function M.AddMultiPassEffect (kernel)
 	end
 end
 
--- Kernel -> property data map --
-local PropertyData = setmetatable({}, { __mode = "k" })
-
--- Name -> property data map --
-local NamedPropertyData = setmetatable({}, { __mode = "v" })
-
--- Lazily looks up a kernel's property data
-local function GetPropertyData (kernel)
-	local pdata = PropertyData[kernel]
-
-	if not pdata then
-		pdata = { handlers = {}, hstate = {} }
-
-		NamedPropertyData[ResolveName(kernel)] = pdata
-	end
-
-	return pdata
-end
-
 -- Set of keys reserved by property handlers (to enforce uniqueness) --
 local Keys = {}
 
 -- Name -> handler map --
 local Handlers = {}
 
---- Adds effect property state to a (vertex userdata-based) kernel.
+-- Name -> property data map --
+local PropertyData = {}
+
+--- Adds effect property state to a kernel.
 -- @ptable kernel Corona shader kernel.
 -- @param handler_name Name of handler, as defined by @{DefinePropertyHandler}, which the
 -- new state is assumed to use.
@@ -102,12 +82,12 @@ local Handlers = {}
 -- The handler's **init** logic is then called as `init(hstate, ...)`, where _hstate_ is the
 -- handler state. This can be used, say, to assign all the data needed by some properties.
 -- @param ... Initialization arguments.
-function M.AddVertexPropertyState (kernel, handler_name, ...)
-	assert(not kernel.graph, "Cannot add vertex property state to multi-pass kernel")
-	-- TODO: Uniform data? (Actually, as is, could be general-purpose...)
+function M.AddPropertyState (kernel, handler_name, ...)
+	assert(not kernel.graph, "Cannot add property state to multi-pass kernel")
 
 	-- If this is the first property, configure the property data and ensure its registration.
-	local pdata = GetPropertyData(kernel)
+	local name = _GetName_(kernel)
+	local pdata = PropertyData[name] or { handlers = {}, hstate = {} }
 	local handlers, hstate = pdata.handlers, pdata.hstate -- capture these rather than pdata itself
 	local props = pdata.properties or {
 		get = function(t, k, state)
@@ -135,7 +115,7 @@ function M.AddVertexPropertyState (kernel, handler_name, ...)
 		end
 	}
 
-	PropertyData[kernel], pdata.properties = pdata, props
+	PropertyData[name], pdata.properties = pdata, props
 
 	-- If this is the first time this handler has been added to the kernel, register the
 	-- handler and add the keys to the state. Initialize the property state.
@@ -152,42 +132,42 @@ function M.AddVertexPropertyState (kernel, handler_name, ...)
 	prop_handler.init(pdata.hstate, ...)
 end
 
---- Variant of @{AddVertexPropertyState} that takes a vertex datum argument.
+--- Variant of @{AddPropertyState} that takes a vertex datum argument.
+--
+-- The kernel may not define uniform userdata.
 -- @ptable kernel Corona shader kernel.
--- @param handler_name As per @{AddVertexPropertyState}.
+-- @param handler_name As per @{AddPropertyState}.
 -- @ptable vertex_datum Vertex userdata component, ostensibly associated with the new state,
 -- that gets added to _kernel_.**vertexData** (which is first created, if necessary).
 --
 -- This is merely for convenience, as it keeps parameter definition and state addition
 -- together in the calling code.
 -- @param ... Initialization arguments.
-function M.AddVertexPropertyState_Datum (kernel, handler_name, vertex_datum, ...)
+function M.AddPropertyState_VertexDatum (kernel, handler_name, vertex_datum, ...)
+	-- TODO: assert no uniform data
+
 	local vdata = kernel.vertexData or {}
 
 	vdata[#vdata + 1] = vertex_datum
 
 	kernel.vertexData = vdata
 
-	_AddVertexPropertyState_(kernel, handler_name, ...)
+	_AddPropertyState_(kernel, handler_name, ...)
 end
-
--- Full name -> property accessors map --
-local Augmented = setmetatable({}, { __mode = "v" })
 
 -- Effect -> state map --
 local State = setmetatable({}, { __mode = "k" })
 
 -- Lazily gets an augmented effect instance's property accessors
 local function GetAccessors (effect, name)
-	local effect_mt, props = getmetatable(effect), NamedPropertyData[name].properties
+	local effect_mt, pdata = getmetatable(effect), PropertyData[name]
+	local props = pdata and pdata.properties
 
-	if props and not Augmented[name] then
+	if props and not pdata.proxy then
 		local get, index = props.get, effect_mt.__index
 		local set, newindex = props.set, effect_mt.__newindex
 
-		State[effect] = {}
-
-		Augmented[name] = {
+		pdata.proxy, State[effect] = {
 			-- Getter --
 			get = get and function(t, k, object)
 				local v = index(t, k)
@@ -205,10 +185,10 @@ local function GetAccessors (effect, name)
 					newindex(t, k, v)
 				end
 			end or newindex
-		}
+		}, {}
 	end
 
-	return Augmented[name]
+	return pdata and pdata.proxy
 end
 
 -- Fill effect -> proxy map --
@@ -235,7 +215,7 @@ function M.AssignEffect (object, name)
 				Proxy[sub_effect] = GetAccessors(sub_effect, v)
 			end
 		end
--- ^^^ TODO: These multi-pass checks probably don't do much good (too late and / or paranoid)
+
 	-- Otherwise, attach accessors to the single effect.
 	elseif not Proxy[effect] then
 		Proxy[effect] = GetAccessors(effect, name)
@@ -277,14 +257,14 @@ end
 -- @treturn boolean X
 -- @treturn ?number Y
 -- @treturn ?number Z
-function M.FoundInProperties (kernel, prefix, prop)
+function M.FoundInProperties (name, prefix, prop)
 	--
 	if prefix then
-		kernel = assert(kernel.graph, "Kernel is not multi-pass").nodes[prefix]
+		name = assert(MultiPass[name], "Kernel is not multi-pass")[prefix]
 	end
 
 	--
-	local pdata = PropertyData[kernel]
+	local pdata = PropertyData[name]
 
 	if pdata then
 		local hstate = pdata.hstate
@@ -330,6 +310,13 @@ function M.GetEffectProperty (object, prefix, prop)
 	end
 end
 
+--- Gets the name used to assign the effect defined by the kernel.
+-- @ptable kernel Corona shader kernel.
+-- @treturn string Resolved name.
+function M.GetName (kernel)
+	return format("%s.%s.%s", kernel.category, kernel.group or "custom", kernel.name)
+end
+
 --- DOCME
 -- @pobject object
 -- @string[opt] prefix
@@ -347,7 +334,8 @@ function M.SetEffectProperty (object, prefix, prop, v)
 end
 
 -- Cache module members.
-_AddVertexPropertyState_ = M.AddVertexPropertyState
+_AddPropertyState_ = M.AddPropertyState
+_GetName_ = M.GetName
 
 -- Export the module.
 return M
