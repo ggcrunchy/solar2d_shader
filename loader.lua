@@ -478,14 +478,14 @@ function M.VertexShader (opts)
 
 	code = parser.StripComments(code)
 
-	if is_table and opts.prelude then
-		code = opts.prelude .. "\n" .. code
-	end
-
 	local include = Include(code)
 
 	if include then
 		code = include .. "\n" .. code
+	end
+
+	if is_table and opts.prelude then
+		code = opts.prelude .. "\n" .. code
 	end
 
 	return Pretty(code, opts)
