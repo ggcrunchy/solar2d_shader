@@ -54,10 +54,11 @@ function M.DefinePairPropertyHandler (params)
 
 		-- Getter --
 		function(t, k, _, effect_state)
-			local combo, k2 = effect_state[first_key][k], effect_state[paired_to_key][k]
+			local first = effect_state[first_key]
+			local combo, k2 = first[k], effect_state[paired_to_key][k]
 
 			if k2 then
-				local u1, u2 = decode(t[combo or effect_state[first_key][k2]])
+				local u1, u2 = decode(t[combo or first[k2]])
 
 				return combo ~= nil and u1 or u2
 			end
@@ -72,12 +73,13 @@ function M.DefinePairPropertyHandler (params)
 
 				-- Figure out the names of the second number and the "combined" kernel
 				-- parameter. Put the two numbers in order.
-				local combo, v2 = effect_state[first_key][k]
+				local first = effect_state[first_key]
+				local combo, v2 = first[k]
 
 				if combo ~= nil then
 					v2 = state[k2]
 				else
-					combo, v, v2 = effect_state[first_key][k2], state[k2], v
+					combo, v, v2 = first[k2], state[k2], v
 				end
 
 				-- If one of the two numbers has yet to be evaluated, decode the default

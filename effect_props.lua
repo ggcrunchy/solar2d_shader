@@ -62,8 +62,6 @@ function M.AddMultiPassEffect (kernel)
 
 		for k, v in pairs(graph.nodes) do
 			sub_effects[k] = v.effect
-			-- ^^^^ TODO: Could auto-require() / defineEffect() these, if not in package.loaded?
-			-- Perhaps down the line, during AssignEffect()?
 		end
 
 		MultiPass[name] = sub_effects
@@ -88,7 +86,7 @@ local PropertyData = {}
 -- routines are added to _kernel_'s list and its keys are initialized in the handler state.
 --
 -- The handler's **init** logic is then called as `init(effect_state, ...)`, where _effect\_state_
--- is a table shared by any instance of _kernel_'s effect. This can be used, say, to assign
+-- is a table shared by each instance of _kernel_'s effect. This can be used, say, to assign
 -- all the data needed by some properties.
 -- @param ... Initialization arguments.
 function M.AddPropertyState (kernel, handler_name, ...)
@@ -184,13 +182,13 @@ local function GetAccessors (effect, name)
 				if v ~= nil then
 					return v
 				else
-					return get(t, k, State[effect], object)
+					return get(t, k, State[t], object)
 				end
 			end or index,
 
 			-- Setter --
 			set = set and function(t, k, v, object)
-				if set(t, k, v, State[effect], object) == "none" then
+				if set(t, k, v, State[t], object) == "none" then
 					newindex(t, k, v)
 				end
 			end or newindex
@@ -232,7 +230,7 @@ function M.AssignEffect (object, name)
 	end
 end
 
---- DOCME
+--- Adds a handler used to resolve properties out of effect state.
 -- @param name Friendly name of the new property type.
 -- @callable get Routine used to get a property value associated with this handler, cf.
 -- @{GetEffectProperty}.
@@ -273,9 +271,10 @@ function M.DefinePropertyHandler (name, get, set, init, has_prop, keys)
 	Handlers[name] = handler
 end
 
---- DOCME
+--- Predicate.
 -- @string name Resolved effect name, cf. @{GetName}.
--- @string prop
+-- @string prop Property to find. This may be composite, cf. @{ParseProperty}, in which
+-- case the effect is assumed to be multi-pass and a pass is used in its place.
 -- @treturn boolean Does _prop_ belong to the effect?
 -- @treturn ?number If the property exists, its minimum value...
 -- @treturn ?number ...and maximum value.
@@ -326,9 +325,16 @@ local function GetEffect (object, pass)
 	end
 end
 
---- DOCME
+--- If found, `object.fill.effect[prop]` (or `object.fill.effect[pass][sub_prop]`) is used.
+--
+-- Otherwise, the effect's getters are called one by one, as `get(effect, prop, state, effect_state)`,
+-- the final two arguments being tables: _effect\_state_ is shared by all instances of the
+-- effect, whereas _state_ is per-instance (these are exclusively for **get** and **set** to use).
+--
+-- If a non-**nil** value is returned along the way, it is returned.
 -- @pobject object Object with effect under **fill.effect**.
--- @string prop Property to get.
+-- @string prop Property to find. This may be composite, cf. @{ParseProperty}, in which
+-- case the effect is assumed to be multi-pass and a pass is used in its place.
 -- @return Property value, or **nil** if absent.
 function M.GetEffectProperty (object, prop)
 	return _GetEffectProperty_Parsed_(object, _ParseProperty_(prop))
@@ -357,10 +363,10 @@ function M.GetName (kernel)
 	return format("%s.%s.%s", kernel.category, kernel.group or "custom", kernel.name)
 end
 
---- Parses a property, which may be composed, i.e. of the form **"pass.name"**.
+--- Parses a property, which may be composite, i.e. of the form **"pass.name"**.
 -- @string prop Property to parse.
--- @treturn ?string If _prop_ is composed, _pass_; otherwise, **nil**.
--- @treturn string If _prop_ is composed, _name_; otherwise, _prop_.
+-- @treturn ?string If _prop_ is composite, _pass_; otherwise, **nil**.
+-- @treturn string If _prop_ is composite, _name_; otherwise, _prop_.
 function M.ParseProperty (prop)
 	local dot = find(prop, "%.")
 
@@ -371,9 +377,17 @@ function M.ParseProperty (prop)
 	end
 end
 
---- DOCME
+--- If _prop_ is not found in the effect, this is the same as `object.fill.effect[prop] = v`
+-- or `object.fill.effect[pass][sub_prop] = v`.
+--
+-- Otherwise, the effect's setters are called one by one, as `found = set(effect, prop, v, state, effect_state)`,
+-- the final two arguments being tables: _effect\_state_ is shared by all instances of the
+-- effect, whereas _state_ is per-instance (these are exclusively for **get** and **set** to use).
+--
+-- If _found_ is true, iteration stops.
 -- @pobject object Object with effect under **fill.effect**.
--- @string prop Property to set.
+-- @string prop Property to find. This may be composite, cf. @{ParseProperty}, in which
+-- case the effect is assumed to be multi-pass and a pass is used in its place.
 -- @param v Value to assign.
 function M.SetEffectProperty (object, prop, v)
 	local pass, eprop = _ParseProperty_(prop)
