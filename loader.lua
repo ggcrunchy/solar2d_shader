@@ -25,6 +25,7 @@
 --
 
 -- Standard library imports --
+local assert = assert
 local concat = table.concat
 local find = string.find
 local gmatch = string.gmatch
@@ -431,19 +432,23 @@ local Prelude = [[
 -- If there are errors in the shader source, e.g. unknown names, this function will still
 -- return its best effort, say to print out for debugging. Since the code will probably be
 -- broken, an error will show up when calling **graphics.defineEffect** down the line.
--- @string code Shader-specific code.
--- @ptable[opt] opts Shader options. Fields:
+-- @tparam ?|string|table opts Shader options.
 --
+-- If this is a string, the shader-specific code.
+--
+-- Otherwise, a table which may contain these fields:
+--
+-- * **main**: Shader-specific code. This field is required.
 -- * **prelude**: If present, this string is prepended (as is) to the final shader, e.g. to
 -- perform **#define**'s.
 -- * **pretty**: If true, the code will be somewhat prettied for printing.
 -- * **no_default_precision**: If true, no default precision qualifier is established for
 -- this shader. **N.B.** This will not play well with most of the registered helper code.
 -- @treturn string Resolved shader code.
-function M.FragmentShader (code, opts)
-	code = _VertexShader_(code, opts)
+function M.FragmentShader (opts)
+	local code = _VertexShader_(opts)
 
-	if not (opts and opts.no_default_precision) then
+	if not (type(opts) == "table" and opts.no_default_precision) then
 		code = Pretty(Prelude, opts) .. code
 	end
 
@@ -451,17 +456,29 @@ function M.FragmentShader (code, opts)
 end
 
 --- As per @{FragmentShader}, but for vertex shaders.
--- @string code Shader-specific code.
--- @ptable[opt] opts Shader options. Fields:
+-- @tparam ?|string|table opts Shader options.
 --
+-- If this is a string, the shader-specific code.
+--
+-- Otherwise, a table which may contain these fields:
+--
+-- * **main**: Shader-specific code. This field is required.
 -- * **prelude**: If present, this string is prepended (as is) to the final shader, e.g. to
 -- perform **#define**'s.
 -- * **pretty**: If true, the code will be somewhat prettied for printing.
 -- @treturn string Resolved shader code.
-function M.VertexShader (code, opts)
+function M.VertexShader (opts)
+	local is_table, code = type(opts) == "table"
+
+	if is_table then
+		code = assert(opts.main, "Missing shader-specific code")
+	else
+		code = opts
+	end
+
 	code = parser.StripComments(code)
 
-	if opts and opts.prelude then
+	if is_table and opts.prelude then
 		code = opts.prelude .. "\n" .. code
 	end
 
