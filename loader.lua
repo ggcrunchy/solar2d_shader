@@ -434,6 +434,8 @@ local Prelude = [[
 -- @string code Shader-specific code.
 -- @ptable[opt] opts Shader options. Fields:
 --
+-- * **prelude**: If present, this string is prepended (as is) to the final shader, e.g. to
+-- perform **#define**'s.
 -- * **pretty**: If true, the code will be somewhat prettied for printing.
 -- * **no_default_precision**: If true, no default precision qualifier is established for
 -- this shader. **N.B.** This will not play well with most of the registered helper code.
@@ -452,10 +454,16 @@ end
 -- @string code Shader-specific code.
 -- @ptable[opt] opts Shader options. Fields:
 --
+-- * **prelude**: If present, this string is prepended (as is) to the final shader, e.g. to
+-- perform **#define**'s.
 -- * **pretty**: If true, the code will be somewhat prettied for printing.
 -- @treturn string Resolved shader code.
 function M.VertexShader (code, opts)
 	code = parser.StripComments(code)
+
+	if opts and opts.prelude then
+		code = opts.prelude .. "\n" .. code
+	end
 
 	local include = Include(code)
 
