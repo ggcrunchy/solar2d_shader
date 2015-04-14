@@ -40,9 +40,11 @@ local sub = string.sub
 -- Cached module references --
 local _AddPropertyState_
 local _FoundInProperties_Parsed_
+local _GetEffectProperty_
 local _GetEffectProperty_Parsed_
 local _GetName_
 local _ParseProperty_
+local _SetEffectProperty_
 local _SetEffectProperty_Parsed_
 
 -- Exports --
@@ -208,7 +210,6 @@ local Proxy = setmetatable({}, { __mode = "k" })
 -- and @{SetEffectProperty} pick up on any extended properties.
 -- @pobject object Display object.
 -- @string name Effect name to assign, cf. @{GetName}.
--- @see AddMultiPassEffect, AddPropertyState
 function M.AssignEffect (object, name)
 	object.fill.effect = name
 
@@ -411,12 +412,33 @@ function M.SetEffectProperty_Parsed (object, pass, prop, v)
 	end
 end
 
+--- Wraps a display object, allowing one to do `v = wrapper[k]` and `wrapper[k] = v` in place
+-- of `GetEffectProperty(object, k)` and `SetEffectProperty(object, k, v)`, respectively.
+-- @pobject object Display object.
+-- @treturn EffectWrapper Wrapper object.
+-- @see GetEffectProperty, SetEffectProperty
+function M.Wrap (object)
+	local wrapper = {
+		__index = function(_, k)
+			return _GetEffectProperty_(object, k)
+		end,
+
+		__newindex = function(_, k, v)
+			_SetEffectProperty_(object, k, v)
+		end
+	}
+
+	return setmetatable(wrapper, wrapper)
+end
+
 -- Cache module members.
 _AddPropertyState_ = M.AddPropertyState
 _FoundInProperties_Parsed_ = M.FoundInProperties_Parsed
+_GetEffectProperty_ = M.GetEffectProperty
 _GetEffectProperty_Parsed_ = M.GetEffectProperty_Parsed
 _GetName_ = M.GetName
 _ParseProperty_ = M.ParseProperty
+_SetEffectProperty_ = M.SetEffectProperty
 _SetEffectProperty_Parsed_ = M.SetEffectProperty_Parsed
 
 -- Export the module.
