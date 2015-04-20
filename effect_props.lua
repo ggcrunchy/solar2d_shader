@@ -378,8 +378,8 @@ function M.ParseProperty (prop)
 	end
 end
 
---- If _prop_ is not found in the effect, this is the same as `object.fill.effect[prop] = v`
--- or `object.fill.effect[pass][sub_prop] = v`.
+--- If _prop_ is found in the effect, this is the same as `object.fill.effect[prop] = v` or
+-- `object.fill.effect[pass][sub_prop] = v`.
 --
 -- Otherwise, the effect's setters are called one by one, as `found = set(effect, prop, v, state, effect_state)`,
 -- the final two arguments being tables: _effect\_state_ is shared by all instances of the
@@ -412,8 +412,8 @@ function M.SetEffectProperty_Parsed (object, pass, prop, v)
 	end
 end
 
---- Wraps a display object, allowing one to do `v = wrapper[k]` and `wrapper[k] = v` in place
--- of `GetEffectProperty(object, k)` and `SetEffectProperty(object, k, v)`, respectively.
+--- Wraps a display object, which allows `v = wrapper[k]` and `wrapper[k] = v` in place of
+-- `GetEffectProperty(object, k)` and `SetEffectProperty(object, k, v)`, respectively.
 -- @pobject object Display object.
 -- @treturn EffectWrapper Wrapper object.
 -- @see GetEffectProperty, SetEffectProperty
