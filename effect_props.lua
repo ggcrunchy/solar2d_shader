@@ -172,29 +172,33 @@ local function GetAccessors (effect, name)
 	local effect_mt, pdata = getmetatable(effect), PropertyData[name]
 	local props = pdata and pdata.properties
 
-	if props and not pdata.proxy then
-		local get, index = props.get, effect_mt.__index
-		local set, newindex = props.set, effect_mt.__newindex
+	if props then
+		if not pdata.proxy then
+			local get, index = props.get, effect_mt.__index
+			local set, newindex = props.set, effect_mt.__newindex
 
-		pdata.proxy, State[effect] = {
-			-- Getter --
-			get = get and function(t, k, object)
-				local v = index(t, k)
+			pdata.proxy = {
+				-- Getter --
+				get = get and function(t, k, object)
+					local v = index(t, k)
 
-				if v ~= nil then
-					return v
-				else
-					return get(t, k, State[t], object)
-				end
-			end or index,
+					if v ~= nil then
+						return v
+					else
+						return get(t, k, State[t], object)
+					end
+				end or index,
 
-			-- Setter --
-			set = set and function(t, k, v, object)
-				if set(t, k, v, State[t], object) == "none" then
-					newindex(t, k, v)
-				end
-			end or newindex
-		}, {}
+				-- Setter --
+				set = set and function(t, k, v, object)
+					if set(t, k, v, State[t], object) == "none" then
+						newindex(t, k, v)
+					end
+				end or newindex
+			}
+		end
+		
+		State[effect] = {}
 	end
 
 	return pdata and pdata.proxy
