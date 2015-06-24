@@ -102,15 +102,11 @@ function M.AddPropertyState (kernel, handler_name, ...)
 	local handlers, effect_state = pdata.handlers, pdata.effect_state -- capture these rather than pdata itself
 	local props = pdata.properties or {
 		get = function(t, k, state)
-			local v = state[k]
+			for handler in pairs(handlers) do
+				local v = handler.get(t, k, state, effect_state)
 
-			if v == nil then
-				for handler in pairs(handlers) do
-					v = handler.get(t, k, state, effect_state)
-
-					if v ~= nil then
-						return v
-					end
+				if v ~= nil then
+					return v
 				end
 			end
 		end,
