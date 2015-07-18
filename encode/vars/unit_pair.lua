@@ -52,25 +52,22 @@ function M.AddVertexProperty (kernel, index, prop1, prop2, combo, defx, defy)
 	effect_props.AddPropertyState_VertexDatum(kernel, "unit_pair", _VertexDatum_(combo, index, defx, defy), prop1, prop2, combo)
 end
 
---- Encodes two numbers &isin; [0, 1] into a **mediump**-range float for retrieval in GLSL.
+--- Encodes two numbers &isin; [0, 1] into a **highp**-range float for retrieval in GLSL.
 -- @number x Number #1...
 -- @number y ...and #2.
 -- @treturn number Encoded pair.
 function M.Encode (x, y)
-	y = y - .5
-
-	return (y < 0 and -1 or 1) * (floor(1023 * x) + abs(y))
+	return encoding_utils.EncodeTenBitsPair(x * 1024, y * 1024)
 end
 
---- Decodes a **mediump**-range float, assumed to be encoded as per @{Encode}.
+--- Decodes a **highp**-range float, assumed to be encoded as per @{Encode}.
 -- @number pair Encoded pair.
 -- @treturn number Number #1...
 -- @treturn number ...and #2.
 function M.Decode (pair)
-	local apair = abs(pair)
-	local xpart = floor(apair)
+	local x, y = encoding_utils.DecodeTenBitsPair(pair)
 
-	return xpart / 1023, (pair < 0 and -1 or 1) * (apair - xpart) + .5
+	return x / 1024, y / 1024
 end
 
 --- Prepares a unit pair-style parameter for addition to a kernel.
@@ -82,10 +79,12 @@ end
 -- @number defy ...and number #2.
 -- @treturn table Vertex userdata component.
 function M.VertexDatum (name, index, defx, defy)
+	local max_value = encoding_utils.TenBitsMax()
+
 	return {
 		name = name,
 		default = _Encode_(defx, defy),
-		min = -1023.5, max = 1023.5,
+		min = -max_value, max = max_value,
 		index = index
 	}
 end

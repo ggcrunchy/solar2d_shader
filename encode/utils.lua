@@ -24,12 +24,44 @@
 --
 
 -- Standard library imports --
+local abs = math.abs
+local assert = assert
+local floor = math.floor
+local log = math.log
 
 -- Modules --
 local effect_props = require("corona_shader.effect_props")
 
 -- Exports --
 local M = {}
+
+--- DOCME
+-- @treturn number xy
+-- @treturn number X
+-- @treturn number Y
+function M.DecodeTenBitsPair (xy)
+	local axy = abs(xy)
+
+	assert(axy > 0 and axy < 2^17, "Invalid code")
+
+	-- Select the 2^16-wide floating point range. The first element in this range is 1 *
+	-- 2^bin, while the ulp will be 2^bin / 2^16 or, equivalently, 2^(bin - 16). Then the
+	-- index of axy is found by dividing its offset into the range by the ulp.
+	local bin = floor(log(axy) / log(2))
+	local num = (axy - 2^(bin)) * 2^(16. - bin)
+
+	-- The lower 10 bits of the offset make up the y-value. The upper 6 bits, along with
+	-- the bin index, are used to compute the x-value. The bin index can exceed 15, so x
+	-- can assume the value 1024 without incident. It seems at first that y cannot, since
+	-- 10 bits fall just short. If the original input was signed, however, this is taken
+	-- to mean "y = 1024". Rather than conditionally setting it directly, though, 1023 is
+	-- found in the standard way and then incremented.
+	local rest = floor(num / 1024.)
+	local y = num - rest * 1024.
+	local y_bias = 1. - (xy < 0 and 0 or 1)
+
+	return bin * 64. + rest, y + y_bias
+end
 
 --- Defines a property handler for two numbers encoded as a pair.
 -- @ptable params Handler parameters. Fields:
@@ -117,6 +149,35 @@ function M.DefinePairPropertyHandler (params)
 		-- Keys --
 		{ first_key, true, paired_to_key, true }
 	)
+end
+
+--- DOCME
+-- @number x
+-- @number y
+-- @treturn number
+function M.EncodeTenBitsPair (x, y)
+	assert(x >= 0 and x <= 1024, "Invalid x")
+	assert(y >= 0 and y <= 1024, "Invalid y")
+
+	x, y = floor(x + .5), floor(y + .5)
+
+	local signed
+
+	if y == 1024 then
+		y, signed = 1023, true
+	end
+
+	local xhi = floor(x / 64)
+	local xlo = x - xhi * 64
+	local xy = (1 + (xlo * 1024 + y) * 2^-16) * 2^xhi
+
+	return signed and -xy or xy
+end
+
+--- DOCME
+-- @treturn number
+function M.TenBitsMax ()
+	return 1025 * 1024 - 1
 end
 
 -- Export the module.

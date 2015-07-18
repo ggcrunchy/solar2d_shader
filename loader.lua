@@ -415,6 +415,8 @@ end
 
 -- Common fragment shader prelude --
 local Prelude = [[
+	#define FRAGMENT_SHADER
+
 	#ifdef GL_ES
 		#ifdef GL_FRAGMENT_PRECISION_HIGH
 			precision highp float;
