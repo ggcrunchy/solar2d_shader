@@ -27,7 +27,6 @@
 -- Standard library imports --
 local assert = assert
 local concat = table.concat
-local find = string.find
 local gmatch = string.gmatch
 local gsub = string.gsub
 local ipairs = ipairs
@@ -193,17 +192,14 @@ local function LoadSegments (input)
 				stripped = gsub(stripped, patterns.InParens, "()")
 
 				for line in gmatch(stripped, patterns.Statement) do
-					local patt = patterns.Declaration
+					local vtype, var = match(line, patterns.Declaration)
 
-					for vtype, var in gmatch(line, patt) do
-						if vtype and vtype ~= "return" then
-							local eq = find(var, "=")
-							local lhs = eq and match(var, patterns.Identifier) or var
+					if vtype and vtype ~= "return" then
+						local_ignore = AddToList(local_ignore, var)
 
-							local_ignore = AddToList(local_ignore, lhs)
+						for extra_var in gmatch(line, patterns.Var) do
+							local_ignore = AddToList(local_ignore, extra_var)
 						end
-
-						patt = patterns.Var
 					end
 				end
 
@@ -227,6 +223,8 @@ local function Visit (list, marks, index, from)
 
 	-- Not yet visited: proceed.
 	if mark == nil then
+		assert(index, index or ("Unable to resolve symbol: " .. from))
+
 		marks[index] = false
 
 		local deps = DependsOn[index]
@@ -241,7 +239,7 @@ local function Visit (list, marks, index, from)
 
 	-- Being visited: cycle.
 	elseif mark == false then
-		yield(from)
+		yield(from, "cycle")
 	end
 end
 

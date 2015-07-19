@@ -67,7 +67,7 @@ M.Statement = "[;%)}]?[^;]*;"
 M.Declaration = "(" .. M.Identifier .. ")%s+(" .. M.Identifier .. ")" .. M.Spaces .. "[=,;]"
 
 --- Variable initializer clause.
-M.Var = "(" .. M.Identifier .. ")" .. M.Spaces .. "[=,;]"
+M.Var = "," .. M.Spaces .. "(" .. M.Identifier .. ")" .. M.Spaces .. "[=,;]"
 
 --- Parameter declaration clause.
 M.Param = "(" .. M.Identifier .. ")" .. M.Spaces .. "[,%)]"
