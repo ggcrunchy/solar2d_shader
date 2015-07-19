@@ -25,12 +25,37 @@
 
 -- Standard library imports --
 local gsub = string.gsub
+local sub = string.sub
 
 -- Modules --
 local patterns = require("corona_shader.impl.patterns")
 
 -- Exports --
 local M = {}
+
+-- Temporary replacements table --
+local RepTable
+
+-- Helper to make a replacement
+local function Replace (what)
+	return RepTable[sub(what, 2, -2)] or "::MISSING::"
+end
+
+--- Performs replacements on the string.
+-- @string source Original source.
+-- @ptable[opt] replacements If absent, this is a no-op. Otherwise, any occurrence of
+-- **"$(KEY)"** in _source_ is replaced by the value associated with key **"KEY"** in this
+-- table. Missing values are replaced with **"::MISSING::"**, which is not valid GLSL.
+-- @treturn string Source with replacements performed.
+function M.InsertReplacements (source, replacements)
+	if replacements then
+		RepTable = replacements
+
+		source, RepTable = gsub(source, "%$(%b())", Replace)
+	end
+
+	return source
+end
 
 do
 	-- C-style comments replacement

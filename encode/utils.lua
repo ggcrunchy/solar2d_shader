@@ -48,7 +48,7 @@ function M.DecodeTenBitsPair (xy)
 	-- 2^bin, while the ulp will be 2^bin / 2^16 or, equivalently, 2^(bin - 16). Then the
 	-- index of axy is found by dividing its offset into the range by the ulp.
 	local bin = floor(log(axy) / log(2))
-	local num = (axy - 2^bin) * 2^(16. - bin)
+	local num = (axy - 2^bin) * 2^(16 - bin)
 
 	-- The lower 10 bits of the offset make up the y-value. The upper 6 bits, along with
 	-- the bin index, are used to compute the x-value. The bin index can exceed 15, so x
@@ -56,11 +56,11 @@ function M.DecodeTenBitsPair (xy)
 	-- 10 bits fall just short. If the original input was signed, however, this is taken
 	-- to mean "y = 1024". Rather than conditionally setting it directly, though, 1023 is
 	-- found in the standard way and then incremented.
-	local rest = floor(num / 1024.)
-	local y = num - rest * 1024.
+	local rest = floor(num / 1024)
+	local y = num - rest * 1024
 	local y_bias = xy < 0 and 1 or 0
 
-	return bin * 64. + rest, y + y_bias
+	return bin * 64 + rest, y + y_bias
 end
 
 --- Defines a property handler for two numbers encoded as a pair.

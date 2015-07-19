@@ -81,7 +81,7 @@ end
 -- Iterates over the input strings and builds an ignore list, if requested
 local function GetInputAndIgnoreList (name)
 	if loaded[name] then
-		return nil, OneString, nil, true -- dummy iteration (already done)
+		return nil, nil, OneString, nil, true -- dummy iteration (already done)
 	else
 		local input = require(name)
 
@@ -92,9 +92,9 @@ local function GetInputAndIgnoreList (name)
 				ignore = AddToList(ignore, input.ignore[i])
 			end
 
-			return ignore, ipairs(input)
+			return ignore, input.replacements, ipairs(input)
 		else
-			return nil, OneString, input
+			return nil, nil, OneString, input
 		end
 	end
 end
@@ -151,10 +151,11 @@ end
 
 -- Loads one or more code segments
 local function LoadSegments (input)
-	local ignore, f, s, v = GetInputAndIgnoreList(input)
+	local ignore, replacements, f, s, v = GetInputAndIgnoreList(input)
 
 	for _, str in f, s, v do
 		str = parser.StripComments(str)
+		str = parser.InsertReplacements(str, replacements)
 
 		-- Associate assignments to variables, as well as function and structure definitions,
 		-- to the code segment. For all intents and purposes, the latter (i.e. constructors)
