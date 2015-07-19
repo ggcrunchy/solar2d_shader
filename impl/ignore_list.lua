@@ -33,7 +33,7 @@ local M = {}
 local IgnoreThese = {}
 
 for _, v in ipairs{
-	"break", "continue", "discard", "do", "else", "for", "if", "return", "while", -- keywords
+	"break", "continue", "discard", "do", "else", "for", "if", "return", "while", "true", "false", -- keywords
 	"__FILE__", "__LINE__", "__VERSION__", "GL_ES", "GL_FRAGMENT_PRECISION_HIGH", -- predefined macros
 	"bool", "int", "float", -- singleton constructors
 	"bvec2", "bvec3", "bvec4", -- vector / matrix constructors
