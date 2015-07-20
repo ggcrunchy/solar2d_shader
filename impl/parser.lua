@@ -24,19 +24,35 @@
 --
 
 -- Standard library imports --
+local gmatch = string.gmatch
 local gsub = string.gsub
+local match = string.match
+local pairs = pairs
 local sub = string.sub
+local type = type
 
 -- Modules --
 local patterns = require("corona_shader.impl.patterns")
 
+-- Cached module references --
+local _StripComments_
+
 -- Exports --
 local M = {}
+
+-- Local tag block --
+local TagBlockPattern = "%$(" .. patterns.InBraces .. ")"
+
+-- Local tag definition --
+local TagDefinitionPattern = "(" .. patterns.Identifier .. ")" .. patterns.Spaces .. "=" .. patterns.Spaces .. "(%w+)"
+
+-- Tag to replace --
+local ReplacePattern = "%$(" .. patterns.InParens .. ")"
 
 -- Temporary replacements table --
 local RepTable
 
--- Helper to make a replacement
+-- Helper to make a (possibly recursive) replacement
 local function Replace (what)
 	return RepTable[sub(what, 2, -2)] or "::MISSING::"
 end
@@ -45,13 +61,43 @@ end
 -- @string source Original source.
 -- @ptable[opt] replacements If absent, this is a no-op. Otherwise, any occurrence of
 -- **"$(KEY)"** in _source_ is replaced by the value associated with key **"KEY"** in this
--- table. Missing values are replaced with **"::MISSING::"**, which is not valid GLSL.
+-- table. Missing values are replaced with **"::MISSING::"** (which is invalid GLSL).
+--
+-- Keys may be nested, e.g. as **"$(KEY_$(ID))"**.
+--
+-- Additionally, for any string of the form **"${KEY=VALUE}"** (with spaces allowed) found in
+-- _source_, **"VALUE"** will be added temporarily to _replacements_ under key **"KEY"**. The
+-- string is then removed from _source_. This step occurs before replacements.
 -- @treturn string Source with replacements performed.
 function M.InsertReplacements (source, replacements)
-	if replacements then
-		RepTable = replacements
+	if type(replacements) == "table" then
+		-- Bring in the replacements, stripping any comments to ease parsing.
+		RepTable = {}
 
-		source, RepTable = gsub(source, "%$(%b())", Replace)
+		for k, v in pairs(replacements) do
+			RepTable[k] = _StripComments_(v)
+		end
+
+		-- Resolve any tag definitions, then strip them from the source.
+		for tag_block in gmatch(source, TagBlockPattern) do
+			local tag, rep = match(tag_block, TagDefinitionPattern)
+
+			if tag then
+				RepTable[tag] = rep
+			end
+		end
+
+		source = gsub(source, TagBlockPattern, "")
+
+		-- Replace any tags. Make multiple passes, in case a replacement introduces tags.
+		-- With that done, throw away the temporary replacements table.
+		repeat
+			local was = source
+
+			source = gsub(source, ReplacePattern, Replace)
+		until source == was
+
+		RepTable = nil
 	end
 
 	return source
@@ -95,6 +141,9 @@ do
 		return source
 	end
 end
+
+-- Cache module members.
+_StripComments_ = M.StripComments
 
 -- Export the module.
 return M
