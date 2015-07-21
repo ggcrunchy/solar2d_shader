@@ -35,6 +35,9 @@ local effect_props = require("corona_shader.effect_props")
 -- Exports --
 local M = {}
 
+-- Maximum legal encoding --
+local Max
+
 --- DOCME
 -- @treturn number xy
 -- @treturn number X
@@ -42,7 +45,7 @@ local M = {}
 function M.DecodeTenBitsPair (xy)
 	local axy = abs(xy)
 
-	assert(axy > 0 and axy < 2^17, "Invalid code")
+	assert(axy > 0 and axy <= Max, "Invalid code")
 
 	-- Select the 2^16-wide floating point range. The first element in this range is 1 *
 	-- 2^bin, while the ulp will be 2^bin / 2^16 or, equivalently, 2^(bin - 16). Then the
@@ -161,10 +164,10 @@ function M.EncodeTenBitsPair (x, y)
 
 	x, y = floor(x + .5), floor(y + .5)
 
-	local signed
+	local signed = y == 1024
 
-	if y == 1024 then
-		y, signed = 1023, true
+	if signed then
+		y = 1023
 	end
 
 	local xhi = floor(x / 64)
@@ -174,10 +177,13 @@ function M.EncodeTenBitsPair (x, y)
 	return signed and -xy or xy
 end
 
---- DOCME
+-- Compute the maximum (unsigned) value.
+Max = M.EncodeTenBitsPair(1024, 1023)
+
+--- Getter.
 -- @treturn number
 function M.TenBitsMax ()
-	return 17 * 65536 - 1
+	return Max
 end
 
 -- Export the module.
