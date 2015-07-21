@@ -416,14 +416,6 @@ end
 local Prelude = [[
 	#define FRAGMENT_SHADER
 
-	#ifdef GL_ES
-		#ifdef GL_FRAGMENT_PRECISION_HIGH
-			precision highp float;
-		#else
-			precision mediump float;
-		#endif
-	#endif
-
 ]]
 
 --- Given some fragment shader code, this will attempt to resolve any dependencies on
