@@ -149,11 +149,34 @@ local function IgnorePreprocessor (str, ignore)
 	return ignore
 end
 
+-- --
+local UsesVaryings = {}
+
 -- Loads one or more code segments
 local function LoadSegments (input)
 	local ignore, replacements, f, s, v = GetInputAndIgnoreList(input)
 
 	for _, str in f, s, v do
+		--
+		local varyings
+
+		if type(str) == "table" then
+			local t = str
+
+			str, varyings = t.code, {}
+
+			assert(type(str) == "string", "Segment code missing or not a string")
+
+			for name, vtype in pairs(t) do
+				if name ~= "code" then
+					assert(type(name) == "string", "Varying name not a string")
+					assert(type(vtype) == "string", "Varying type not a string")
+
+					varyings[name] = vtype
+				end
+			end
+		end
+
 		str = parser.StripComments(str)
 		str = parser.InsertReplacements(str, replacements)
 
@@ -185,6 +208,13 @@ local function LoadSegments (input)
 				local_ignore = IgnorePreprocessor(outer, local_ignore)
 				local_ignore = IgnorePreprocessor(body, local_ignore)
 
+				-- Ignore any varyings.
+				if varyings then
+					for name in pairs(varyings) do
+						local_ignore = AddToList(local_ignore, name)
+					end
+				end
+
 				-- With the preprocessor directives and parameters addressed, filter them
 				-- out of the code. Ignore any variables declared in the function body.
 				local stripped = body
@@ -214,7 +244,7 @@ local function LoadSegments (input)
 		end
 
 		-- Register the code and its dependencies.
-		ID, Code[ID], DependsOn[ID] = ID + 1, str, depends_on
+		ID, Code[ID], DependsOn[ID], UsesVaryings[ID] = ID + 1, str, depends_on, varyings
 	end
 end
 
@@ -365,6 +395,24 @@ local function CollectIntoList (code, patt, ignore, collect)
 	return collect
 end
 
+--
+local function PrependVaryings (varyings)
+	if varyings then
+		local list = {}
+
+		for k, v in pairs(varyings) do
+			list[#list + 1] = ("\tvarying %s %s;"):format(v, k)
+		end
+
+		list[#list + 1] = ""
+		list[#list + 1] = ""
+
+		return concat(list, "\n")
+	else
+		return ""
+	end
+end
+
 -- Infers depended-on code to prepend
 local function Include (code)
 	-- Ignore any local assignments and definitions.
@@ -387,19 +435,33 @@ local function Include (code)
 	if collect then
 		sort(collect)
 
-		local pieces, prev = {}
+		local pieces, prev, varyings = {}
 
 		for i = 1, #collect do
 			local id = collect[i]
 
 			if id ~= prev then
 				pieces[#pieces + 1] = Code[id]
+
+				local uses_varyings = UsesVaryings[id]
+
+				if uses_varyings then
+					varyings = varyings or {}
+
+					for k, v in pairs(uses_varyings) do
+						local cur = varyings[k]
+
+						assert(not cur or cur == v, "Inconsistent duplicate varying")
+
+						varyings[k] = v
+					end
+				end
 			end
 
 			prev = id
 		end
 
-		return concat(pieces, "\n")
+		return PrependVaryings(varyings) .. concat(pieces, "\n")
 	end
 end
 
