@@ -149,7 +149,7 @@ local function IgnorePreprocessor (str, ignore)
 	return ignore
 end
 
--- --
+-- Lists of varyings, if any, referenced by segments --
 local UsesVaryings = {}
 
 -- Loads one or more code segments
@@ -157,7 +157,8 @@ local function LoadSegments (input)
 	local ignore, replacements, f, s, v = GetInputAndIgnoreList(input)
 
 	for _, str in f, s, v do
-		--
+		-- Grab the raw segment source. Validate any associated varyings, putting them in
+		-- a separate list; in this case the source is extracted from the table as well.
 		local varyings
 
 		if type(str) == "table" then
@@ -395,7 +396,8 @@ local function CollectIntoList (code, patt, ignore, collect)
 	return collect
 end
 
---
+-- Prepends any varyings to the shader source
+-- TODO: Intelligent ordering? if so, does it need to match on both ends?
 local function PrependVaryings (varyings)
 	if varyings then
 		local list = {}
@@ -431,7 +433,7 @@ local function Include (code)
 	collect = CollectIntoList(code, patterns.Call, ignore, collect)
 
 	-- If any dependencies were found, put them into topologically-sorted order, remove any
-	-- duplicates, stitch them together, and return the result.
+	-- duplicates, stitch them together (along with any varyings), and return the result.
 	if collect then
 		sort(collect)
 
@@ -443,15 +445,15 @@ local function Include (code)
 			if id ~= prev then
 				pieces[#pieces + 1] = Code[id]
 
+				-- If this segment uses any varyings, add them to the list to be prepended.
+				-- Exact duplicates are okay, and ignored; inconsistent ones are errors.
 				local uses_varyings = UsesVaryings[id]
 
 				if uses_varyings then
 					varyings = varyings or {}
 
 					for k, v in pairs(uses_varyings) do
-						local cur = varyings[k]
-
-						assert(not cur or cur == v, "Inconsistent duplicate varying")
+						assert((varyings[k] or v) == v, "Inconsistent duplicate varying")
 
 						varyings[k] = v
 					end
