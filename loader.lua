@@ -119,7 +119,7 @@ end
 -- Gather depended-on names
 local function BuildDependsOnList (code, patt, ignore, local_ignore, depends_on)
 	for dot, name, token in gmatch(code, patt) do
-		if dot == "" and token == "" and Accepts(ignore, name) and Accepts(local_ignore, name) then
+		if dot == "" and token ~= "{" and Accepts(ignore, name) and Accepts(local_ignore, name) then
 			depends_on = AddToList(depends_on, name)
 		end
 	end
@@ -191,57 +191,55 @@ local function LoadSegments (input)
 		AddNames(outer, patterns.DefineFunc, ignore)
 		AddNames(outer, patterns.Struct, ignore)
 
-		-- Build up dependencies, ignoring local variables. This must be done for each (non-
-		-- ignored) function, since an identifier may be local to one function but refer to
-		-- an actual external dependency in another.
+		-- Build up dependencies, ignoring local variables. This must be done for each
+		-- function, since an identifier may be local to one function but refer to an
+		-- actual external dependency in another.
 		local depends_on
 
 		for func, params, body in gmatch(str, patterns.Signature) do
-			if not (ignore and ignore[func]) then
-				-- Ignore the function's parameters, plus preprocessor directives both in the
-				-- function and in the surrounding scope.
-				local local_ignore
+			-- Ignore the function's parameters, plus preprocessor directives both in the
+			-- function and in the surrounding scope.
+			local local_ignore
 
-				for param in gmatch(params, patterns.Param) do
-					local_ignore = AddToList(local_ignore, param)
-				end
-
-				local_ignore = IgnorePreprocessor(outer, local_ignore)
-				local_ignore = IgnorePreprocessor(body, local_ignore)
-
-				-- Ignore any varyings.
-				if varyings then
-					for name in pairs(varyings) do
-						local_ignore = AddToList(local_ignore, name)
-					end
-				end
-
-				-- With the preprocessor directives and parameters addressed, filter them
-				-- out of the code. Ignore any variables declared in the function body.
-				local stripped = body
-
-				stripped = gsub(stripped, patterns.Preprocessor, "")
-				stripped = gsub(stripped, patterns.InParens, "()")
-
-				for line in gmatch(stripped, patterns.Statement) do
-					local vtype, var = match(line, patterns.Declaration)
-
-					if vtype and vtype ~= "return" then
-						local_ignore = AddToList(local_ignore, var)
-
-						for extra_var in gmatch(line, patterns.Var) do
-							local_ignore = AddToList(local_ignore, extra_var)
-						end
-					end
-				end
-
-				-- Find any variables (which must be distinguished from structure fields and vector
-				-- components) and function calls (which must be distinguished from definitions). If
-				-- these are not to be ignored (e.g. local functions or built-ins), add their names
-				-- to the dependencies (n.b. this can harmlessly self-reference the code segment).
-				depends_on = BuildDependsOnList(body, patterns.UseVar, ignore, local_ignore, depends_on)
-				depends_on = BuildDependsOnList(body, patterns.Call, ignore, local_ignore, depends_on)
+			for param in gmatch(params, patterns.Param) do
+				local_ignore = AddToList(local_ignore, param)
 			end
+
+			local_ignore = IgnorePreprocessor(outer, local_ignore)
+			local_ignore = IgnorePreprocessor(body, local_ignore)
+
+			-- Ignore any varyings.
+			if varyings then
+				for name in pairs(varyings) do
+					local_ignore = AddToList(local_ignore, name)
+				end
+			end
+
+			-- With the preprocessor directives and parameters addressed, filter them
+			-- out of the code. Ignore any variables declared in the function body.
+			local stripped = body
+
+			stripped = gsub(stripped, patterns.Preprocessor, "")
+			stripped = gsub(stripped, patterns.InParens, "()")
+
+			for line in gmatch(stripped, patterns.Statement) do
+				local vtype, var = match(line, patterns.Declaration)
+
+				if vtype and vtype ~= "return" then
+					local_ignore = AddToList(local_ignore, var)
+
+					for extra_var in gmatch(line, patterns.Var) do
+						local_ignore = AddToList(local_ignore, extra_var)
+					end
+				end
+			end
+
+			-- Find any variables (which must be distinguished from structure fields and vector
+			-- components) and function calls (which must be distinguished from definitions). If
+			-- these are not to be ignored (e.g. local functions or built-ins), add their names
+			-- to the dependencies (n.b. this can harmlessly self-reference the code segment).
+			depends_on = BuildDependsOnList(body, patterns.UseVar, ignore, local_ignore, depends_on)
+			depends_on = BuildDependsOnList(body, patterns.Call, ignore, local_ignore, depends_on)
 		end
 
 		-- Register the code and its dependencies.
