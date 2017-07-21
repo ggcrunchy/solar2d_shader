@@ -143,7 +143,7 @@ end
 -- @ptable kernel Corona shader kernel.
 -- @param handler_name As per @{AddPropertyState}.
 -- @ptable vertex_datum Vertex userdata component, which is assumed to be associated with the
--- new state. I is added to _kernel_.**vertexData** (if absent, this is first created).
+-- new state. It is added to _kernel_.**vertexData** (if absent, this is first created).
 --
 -- This function is merely for convenience, meant to keep the parameter definition and adding
 -- of state together in the calling code.
