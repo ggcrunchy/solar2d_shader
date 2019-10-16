@@ -52,6 +52,10 @@ local _VertexShader_
 -- Exports --
 local M = {}
 
+--
+--
+--
+
 -- TODO: are arrays well-handled?
 
 -- Identifier -> code segment ID map; next available segment ID --
@@ -546,8 +550,6 @@ function M.VertexShader (opts)
 	return Pretty(code, opts)
 end
 
--- Cache module members.
 _VertexShader_ = M.VertexShader
 
--- Export the module.
 return M

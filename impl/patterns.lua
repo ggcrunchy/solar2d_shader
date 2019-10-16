@@ -27,6 +27,10 @@
 -- Exports --
 local M = {}
 
+--
+--
+--
+
 --- Optional dot.
 M.Dot = "(%.?)"
 
@@ -78,5 +82,4 @@ M.Preprocessor = "#(" .. M.Identifier .. ")([^\n]*)"
 --- Function signature.
 M.Signature = "(" .. M.Identifier .. ")" .. M.Spaces .. "(" .. M.InParens .. ")" .. M.Spaces .. "(" .. M.InBraces .. ")"
 
--- Export the module.
 return M

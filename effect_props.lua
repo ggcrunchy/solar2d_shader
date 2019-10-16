@@ -50,6 +50,10 @@ local _SetEffectProperty_Parsed_
 -- Exports --
 local M = {}
 
+--
+--
+--
+
 -- Name -> subeffects map --
 local MultiPass = {}
 
@@ -431,7 +435,6 @@ function M.Wrap (object)
 	return setmetatable(wrapper, wrapper)
 end
 
--- Cache module members.
 _AddPropertyState_ = M.AddPropertyState
 _FoundInProperties_Parsed_ = M.FoundInProperties_Parsed
 _GetEffectProperty_ = M.GetEffectProperty
@@ -441,5 +444,4 @@ _ParseProperty_ = M.ParseProperty
 _SetEffectProperty_ = M.SetEffectProperty
 _SetEffectProperty_Parsed_ = M.SetEffectProperty_Parsed
 
--- Export the module.
 return M

@@ -29,6 +29,10 @@ local ipairs = ipairs
 -- Exports --
 local M = {}
 
+--
+--
+--
+
 -- Build up a list of names to ignore when gathering identifiers.
 local IgnoreThese = {}
 
@@ -80,5 +84,4 @@ function M.IsAccepted (ignore_list, name)
 	end
 end
 
--- Export the module.
 return M

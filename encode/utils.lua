@@ -35,6 +35,10 @@ local effect_props = require("corona_shader.effect_props")
 -- Exports --
 local M = {}
 
+--
+--
+--
+
 -- Maximum legal encoding --
 local Max
 
@@ -186,5 +190,4 @@ function M.TenBitsMax ()
 	return Max
 end
 
--- Export the module.
 return M

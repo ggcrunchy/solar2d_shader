@@ -40,6 +40,10 @@ local _StripComments_
 -- Exports --
 local M = {}
 
+--
+--
+--
+
 -- Local tag block --
 local TagBlockPattern = "%$(" .. patterns.InBraces .. ")"
 
@@ -142,8 +146,6 @@ do
 	end
 end
 
--- Cache module members.
 _StripComments_ = M.StripComments
 
--- Export the module.
 return M

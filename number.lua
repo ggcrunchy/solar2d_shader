@@ -26,6 +26,10 @@
 -- Exports --
 local M = {}
 
+--
+--
+--
+
 --- DOCME
 function M.XY_Barycenter4 (x, y)
 	-- Compute barycentric coordinates of each corner using Q4 Serendipity quadrilaterals
@@ -40,5 +44,4 @@ function M.XY_Barycenter4 (x, y)
 	return a, b, c, d
 end
 
--- Export the module.
 return M

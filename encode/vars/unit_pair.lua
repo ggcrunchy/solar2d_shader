@@ -38,6 +38,10 @@ local _VertexDatum_
 -- Exports --
 local M = {}
 
+--
+--
+--
+
 --- Adds a unit pair-style parameter to a kernel.
 --
 -- Some property data is also added for the parameter, cf. @{corona_shader.effect_props.AddPropertyState}.
@@ -96,9 +100,7 @@ encoding_utils.DefinePairPropertyHandler{
 	min_value = 0, max_value = 1
 }
 
--- Cache module members.
 _Encode_ = M.Encode
 _VertexDatum_ = M.VertexDatum
 
--- Export the module.
 return M
