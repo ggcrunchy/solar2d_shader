@@ -1,2 +1,2 @@
-# corona_shader
-Utilities for shaders in Corona SDK.
+# solar2d_shader
+Utilities for shaders in Solar2D.
